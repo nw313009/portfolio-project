@@ -1,0 +1,18 @@
+---
+description: Frontend conventions for React/Next.js components and routes.
+globs:
+  - "src/**/*.tsx"
+  - "src/**/*.ts"
+alwaysApply: false
+---
+
+# Frontend conventions
+- Server Components by default; add `"use client"` only when the component needs state, effects, or browser APIs.
+- Named exports only (except a route's default page/layout export).
+- Keep components under ~200 lines; extract subcomponents when they grow.
+- Tailwind for styling; use shadcn/ui primitives; no inline style objects unless truly necessary.
+- Motion via framer-motion; every animation must honor `prefers-reduced-motion`.
+- Accessibility: semantic elements, keyboard focus states, alt text, WCAG AA contrast.
+- Data types are the source of truth: derive UI from the zod `Project` schema; never hardcode shapes.
+- No `localStorage`/`sessionStorage` assumptions in SSR paths; guard browser-only code.
+- Before using an unfamiliar API of a library in this repo, pull its docs via Context7 first.

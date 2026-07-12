@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "C:\\Program Files\\nodejs\\npx.cmd",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "playwright": {
+      "command": "C:\\Program Files\\nodejs\\npx.cmd",
+      "args": ["-y", "@playwright/mcp@latest", "--headless"]
+    },
+    "figma": {
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "awslabs.aws-api-mcp-server": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "--interactive",
+        "--env",
+        "AWS_REGION=us-east-1",
+        "--volume",
+        "C:/Users/nanda/.aws:/app/.aws:ro",
+        "public.ecr.aws/awslabs-mcp/awslabs/aws-api-mcp-server:latest"
+      ],
+      "env": {}
+    }
+  }
+}

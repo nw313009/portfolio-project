@@ -1,0 +1,17 @@
+---
+id: broken-project
+title: Broken Project
+slug: broken-project
+startDate: "2024-01-01"
+stack: []
+languages: []
+summary: This fixture intentionally omits the required demoUrl for its webapp preview.
+githubUrl: https://github.com/example/broken-project
+preview:
+  previewType: webapp
+  poster: /previews/broken.png
+---
+
+This fixture exists only to prove that Velite's build fails when a project's
+`preview` payload violates the canonical Zod schema (here: `webapp` without
+its required `demoUrl`). It is not part of the real site content.

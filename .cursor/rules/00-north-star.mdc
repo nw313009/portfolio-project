@@ -1,0 +1,22 @@
+---
+description: Project north star, invariants, and the phase-by-phase operating protocol. Applies to every task.
+alwaysApply: true
+---
+
+# North star
+Build a timeline portfolio that proves elite frontend engineering (Next.js 15 + TS). It reads as a vertical center-line timeline, oldest project at top, scroll-driven, paginated. Deploy on Vercel. A Python/FastAPI backend + AI arrive in later phases. Admin (auth) can add projects; public needs no login.
+
+# Hard invariants (never violate)
+- Never execute untrusted repo code on our infra. Previews are iframes of MY deployed demos, recorded media, or embeds — never a live build of an arbitrary repo.
+- authN ≠ authZ: "logged in" and "allowed" are separate checks. Admin writes always re-check an isAdmin allowlist.
+- Metrics writes are fire-and-forget and must never block or break the UI.
+- No secrets in git. Server-only for tokens/keys.
+- TypeScript strict; named exports; no `any` without a written reason.
+
+# Operating protocol (follow every session)
+1. Read `docs/PROGRESS.md` to find the CURRENT phase. Work ONLY on that phase.
+2. Before coding, open the current phase in `docs/phases/PHASES.md` and its Out-of-Scope list. Do not build anything listed under a later phase or Out-of-Scope. If something must be pulled forward, ask first — don't just do it.
+3. Use Context7 for any framework/library API before writing it. Don't rely on memory for Next.js/React/Drizzle/Auth.js/FastAPI APIs.
+4. Implement the smallest coherent slice, then run the Test Gate for this phase (typecheck → lint → build → tests → Playwright verify of the acceptance criteria). Fix failures before continuing.
+5. Update `docs/PROGRESS.md` (check off Done items, note decisions/deviations).
+6. STOP at the phase boundary. Summarize what changed and the test results, then wait for my review. Do not start the next phase on your own.

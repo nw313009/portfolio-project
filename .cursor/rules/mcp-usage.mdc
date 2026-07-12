@@ -1,0 +1,9 @@
+---
+description: MCP usage rules for project agents
+globs:
+alwaysApply: true
+---
+
+Always use the Context7 MCP when writing or modifying code that uses a third-party library.
+
+When the Figma MCP returns a localhost image source, use it directly. Do not import icon packages to replace Figma-provided icons, and do not use placeholders when a real source is provided.
