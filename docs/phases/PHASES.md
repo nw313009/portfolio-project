@@ -33,6 +33,16 @@ Each phase has a Goal, In-Scope, **Out-of-Scope** (hard guard against drift), De
 
 **Out-of-scope:** Python/FastAPI, AI features, AWS, live sandboxed builds, anything touching auth on the public hot path.
 
+**Locked infra decisions:**
+- **DB/testing:** Neon branching — a disposable/reset `test` branch for migrations + unit tests, a seeded `dev` branch for E2E, `main` = prod. Never test against prod. `DATABASE_URL` per env; migrations forward-only, committed.
+- **Media storage:** Vercel Blob (not AWS). Persist the blob URL on the project; wrap the upload in a single `storagePut()` helper so Phase 3 can swap to S3 without touching callers.
+- **Rate limiting:** `@upstash/ratelimit` on Upstash Redis, sliding window keyed on client IP; return 429 over the limit; never let a 429 affect the visitor UI; do NOT use Postgres for rate-limiting.
+- All three (Neon, Vercel Blob, Upstash) are serverless, scale-to-zero, free-tier, no-AWS.
+
+**Confirmed patterns (Context7-verified — use these, don't re-derive):**
+- Drizzle: `drizzle-orm/neon-http` + `@neondatabase/serverless` for fast edge/ISR reads; `drizzle-orm/neon-serverless` (WS `Pool`) when a write needs a transaction. Migrations via `drizzle-kit generate` / `migrate`.
+- Auth.js v5: split `auth.config.ts` (edge-safe, providers only) + `auth.ts`; JWT sessions (no DB adapter — single-admin allowlist); `[...nextauth]` route handler; `middleware.ts` wrapping `auth()`.
+
 **Definition of Done:** Public timeline reads from DB and stays cached/fast; admin login works and gates writes; adding a GitHub URL creates a project (draft on capture failure, never a 500); events land in the DB; dashboard shows per-project view/hover/CTR; audit_log records admin writes; Test Gate green.
 
 **Test Gate:** unauthed user cannot reach `/admin` or POST projects; authed admin can add a project end-to-end; a public hover fires exactly one event and never blocks UI; bad GitHub URL yields a draft + audit entry, not a crash.
