@@ -2,9 +2,13 @@ import { test, expect, type Page } from "@playwright/test";
 
 /**
  * Phase 1 acceptance E2E: the Test Gate criteria from `docs/phases/PHASES.md`.
- * Exercises the real sample content in `src/content/projects` (4 projects,
- * oldest "Pixel Dungeon" 2021 to newest "Timeline Portfolio" 2024, spanning
- * the `media`, `cli`, `library`, and `webapp` preview types).
+ * Exercises the same 4 sample projects originally authored as MDX in
+ * `src/content/projects` (oldest "Pixel Dungeon" 2021 to newest "Timeline
+ * Portfolio" 2024, spanning the `media`, `cli`, `library`, and `webapp`
+ * preview types) — as of Phase 2 Slice 2, the public page reads these from
+ * the `projects` table (seeded via `pnpm db:seed`) instead of MDX at request
+ * time, so this file also proves the DB-backed read path preserves the
+ * Phase 1 UI, ordering, and preview behavior exactly.
  */
 
 const PROJECT_TITLES_OLDEST_FIRST = [

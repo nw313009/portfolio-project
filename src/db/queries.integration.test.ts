@@ -6,8 +6,11 @@ import {
   deleteEventsByProjectId,
   deleteProject,
   getProjectById,
+  getPublishedProjectEntries,
+  getPublishedProjects,
   insertAuditLog,
   insertProject,
+  upsertProject,
 } from "@/db/queries";
 import { projectEntryToInsertRow } from "@/db/mappers";
 import type { ProjectEntry } from "@/lib/content";
@@ -98,3 +101,89 @@ describe.skipIf(!hasDb)("Drizzle schema/queries against a real Neon branch", () 
     expect(row.ts).toBeInstanceOf(Date);
   });
 });
+
+/**
+ * Slice 2 read path: `upsertProject` (idempotent seed) and the public-facing
+ * `getPublishedProjects`/`getPublishedProjectEntries` helpers the timeline
+ * page reads from. Uses its own fixtures (unlikely-to-collide ids/slugs) so
+ * it doesn't assume the disposable test branch starts empty.
+ */
+describe.skipIf(!hasDb)(
+  "upsertProject / getPublishedProjects / getPublishedProjectEntries",
+  () => {
+    const olderId = `test-published-older-${randomUUID()}`;
+    const newerId = `test-published-newer-${randomUUID()}`;
+    const draftId = `test-draft-${randomUUID()}`;
+
+    function fixtureEntry(id: string, startDate: string): ProjectEntry {
+      return {
+        id,
+        title: `Slice 2 fixture ${id}`,
+        slug: id,
+        startDate,
+        endDate: null,
+        stack: ["Next.js"],
+        languages: ["TypeScript"],
+        summary: "A Slice 2 read-path fixture.",
+        githubUrl: "https://github.com/example/slice-2-fixture",
+        preview: { previewType: "webapp", demoUrl: "https://example.com" },
+        body: "<p>Fixture body</p>",
+      };
+    }
+
+    afterAll(async () => {
+      await Promise.all(
+        [olderId, newerId, draftId].map((id) => deleteProject(id)),
+      );
+    });
+
+    it("upsertProject inserts, then updates the same row on a second call instead of duplicating it", async () => {
+      const inserted = await upsertProject(
+        projectEntryToInsertRow(fixtureEntry(olderId, "2020-01-01"), "published"),
+      );
+      expect(inserted.id).toBe(olderId);
+      expect(inserted.status).toBe("published");
+
+      const revised = {
+        ...fixtureEntry(olderId, "2020-01-01"),
+        title: "Updated title",
+      };
+      const updated = await upsertProject(
+        projectEntryToInsertRow(revised, "published"),
+      );
+      expect(updated.id).toBe(olderId);
+      expect(updated.title).toBe("Updated title");
+      expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(
+        inserted.updatedAt.getTime(),
+      );
+
+      const fetched = await getProjectById(olderId);
+      expect(fetched?.title).toBe("Updated title");
+    });
+
+    it("getPublishedProjects excludes draft rows and orders published rows oldest startDate first", async () => {
+      await upsertProject(
+        projectEntryToInsertRow(fixtureEntry(newerId, "2025-01-01"), "published"),
+      );
+      await upsertProject(
+        projectEntryToInsertRow(fixtureEntry(draftId, "2019-01-01"), "draft"),
+      );
+
+      const published = await getPublishedProjects();
+      const ids = published.map((row) => row.id);
+
+      expect(ids).toContain(olderId);
+      expect(ids).toContain(newerId);
+      expect(ids).not.toContain(draftId);
+      expect(ids.indexOf(olderId)).toBeLessThan(ids.indexOf(newerId));
+    });
+
+    it("getPublishedProjectEntries maps published rows through projectRowToEntry", async () => {
+      const entries = await getPublishedProjectEntries();
+      const entry = entries.find((candidate) => candidate.id === olderId);
+      expect(entry?.title).toBe("Updated title");
+      expect(entry?.preview.previewType).toBe("webapp");
+      expect(entries.some((candidate) => candidate.id === draftId)).toBe(false);
+    });
+  },
+);
