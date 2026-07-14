@@ -1,7 +1,10 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import {
+  DuplicateProjectError,
   appendEvent,
+  createProjectWithAudit,
   deleteAuditLogById,
   deleteEventsByProjectId,
   deleteProject,
@@ -10,10 +13,14 @@ import {
   getPublishedProjects,
   insertAuditLog,
   insertProject,
+  setProjectStatusWithAudit,
   upsertProject,
 } from "@/db/queries";
+import { db } from "@/db/client";
+import { auditLog } from "@/db/schema";
 import { projectEntryToInsertRow } from "@/db/mappers";
 import type { ProjectEntry } from "@/lib/content";
+import type { NewProjectRow } from "@/db/schema";
 
 /**
  * Runs only against a real Neon connection. Prefers `TEST_DATABASE_URL` (the
@@ -182,8 +189,87 @@ describe.skipIf(!hasDb)(
       const entries = await getPublishedProjectEntries();
       const entry = entries.find((candidate) => candidate.id === olderId);
       expect(entry?.title).toBe("Updated title");
-      expect(entry?.preview.previewType).toBe("webapp");
+      expect(entry?.preview?.previewType).toBe("webapp");
       expect(entries.some((candidate) => candidate.id === draftId)).toBe(false);
     });
   },
 );
+
+/**
+ * Slice 4 ingestion end-to-end against the real Neon `test` branch: an ingested
+ * DRAFT is hidden from the public timeline until published, both writes are
+ * audit-logged in their transaction, and re-ingesting the same repo is rejected
+ * by the UNIQUE(github_owner, github_repo) constraint.
+ */
+describe.skipIf(!hasDb)("createProjectWithAudit / setProjectStatusWithAudit", () => {
+  const ingestedId = `test-ingested-${randomUUID()}`;
+  const owner = `example-${randomUUID().slice(0, 8)}`;
+
+  const row: NewProjectRow = {
+    id: ingestedId,
+    slug: ingestedId,
+    title: "Ingested Draft",
+    startDate: "2015-05-05",
+    endDate: null,
+    stack: [],
+    languages: ["Go"],
+    summary: "An ingested draft project.",
+    githubUrl: `https://github.com/${owner}/ingested`,
+    preview: null,
+    status: "draft",
+    githubOwner: owner,
+    githubRepo: "ingested",
+    primaryLanguage: "Go",
+    stars: 1,
+    topics: ["cli"],
+    githubCreatedAt: new Date("2015-05-05T00:00:00Z"),
+    githubPushedAt: null,
+    homepageUrl: null,
+    metadataFetchedAt: new Date(),
+    demoUrl: "https://demo.example.com",
+    previewType: "webapp",
+  };
+
+  afterAll(async () => {
+    await db.delete(auditLog).where(eq(auditLog.targetId, ingestedId));
+    await deleteProject(ingestedId);
+  });
+
+  it("creates a DRAFT that is hidden from the public timeline, then appears once published (as a metadata-only node)", async () => {
+    await createProjectWithAudit(row, "admin@example.com");
+
+    const beforePublish = await getPublishedProjectEntries();
+    expect(beforePublish.some((entry) => entry.id === ingestedId)).toBe(false);
+
+    await setProjectStatusWithAudit(ingestedId, "published", "admin@example.com");
+
+    const afterPublish = await getPublishedProjectEntries();
+    const node = afterPublish.find((entry) => entry.id === ingestedId);
+    expect(node).toBeDefined();
+    expect(node?.title).toBe("Ingested Draft");
+    // Metadata-only: no preview surface persisted for ingested rows this slice.
+    expect(node?.preview).toBeUndefined();
+  });
+
+  it("wrote audit_log rows for the create and the publish (same actor)", async () => {
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.targetId, ingestedId));
+    const actions = audits.map((a) => a.action);
+    expect(actions).toContain("project.create");
+    expect(actions).toContain("project.publish");
+    expect(audits.every((a) => a.actor === "admin@example.com")).toBe(true);
+  });
+
+  it("rejects re-ingesting the same repo (unique owner/repo) with DuplicateProjectError", async () => {
+    const duplicate: NewProjectRow = {
+      ...row,
+      id: `${ingestedId}-dup`,
+      slug: `${ingestedId}-dup`,
+    };
+    await expect(
+      createProjectWithAudit(duplicate, "admin@example.com"),
+    ).rejects.toBeInstanceOf(DuplicateProjectError);
+  });
+});

@@ -75,7 +75,7 @@ export const previewSchema = z.discriminatedUnion("previewType", [
 
 export type Preview = z.infer<typeof previewSchema>;
 
-const projectBase = z.strictObject({
+export const projectBase = z.strictObject({
   id: z.string().min(1),
   title: z.string().min(1),
   slug: z
@@ -92,6 +92,24 @@ const projectBase = z.strictObject({
   githubUrl: z.url(),
   preview: previewSchema,
 });
+
+/**
+ * A project WITHOUT a `preview` payload — the shape of a GitHub-ingested
+ * timeline node (Slice 4). Ingested rows persist `previewType`/`demoUrl` as
+ * columns but no discriminated-union `preview` jsonb, so the public read path
+ * validates them through this preview-less schema and renders a metadata-only
+ * card (the preview surface itself arrives in the later preview slice). The
+ * `endDate >= startDate` invariant is kept.
+ */
+export const projectMetadataSchema = projectBase
+  .omit({ preview: true })
+  .refine(
+    (project) =>
+      project.endDate == null || project.endDate >= project.startDate,
+    { message: "endDate must be on or after startDate", path: ["endDate"] },
+  );
+
+export type ProjectMetadata = z.infer<typeof projectMetadataSchema>;
 
 export const projectSchema = projectBase
   .refine(

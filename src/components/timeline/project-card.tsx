@@ -11,11 +11,11 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDateRange } from "@/lib/format-date-range";
-import type { ProjectEntry } from "@/lib/content";
+import type { TimelineProject } from "@/lib/content";
 import { ProjectPreview } from "./preview/preview";
 
 interface ProjectCardProps {
-  project: ProjectEntry;
+  project: TimelineProject;
   /** Which side of the center line this card sits on; controls the slide-in direction. */
   side?: "left" | "right";
 }
@@ -68,7 +68,12 @@ export function ProjectCard({ project, side = "left" }: ProjectCardProps) {
               </li>
             ))}
           </ul>
-          <ProjectPreview preview={project.preview} title={project.title} />
+          {/* Metadata-only nodes (GitHub-ingested, Slice 4) have no `preview`
+              payload yet; the preview surface renders in the later preview
+              slice. Only render it when a full preview is present. */}
+          {project.preview ? (
+            <ProjectPreview preview={project.preview} title={project.title} />
+          ) : null}
         </CardContent>
         <CardFooter className="gap-4">
           <a
@@ -79,7 +84,7 @@ export function ProjectCard({ project, side = "left" }: ProjectCardProps) {
           >
             GitHub ↗
           </a>
-          {project.preview.previewType === "webapp" ? (
+          {project.preview?.previewType === "webapp" ? (
             <a
               href={project.preview.demoUrl}
               target="_blank"

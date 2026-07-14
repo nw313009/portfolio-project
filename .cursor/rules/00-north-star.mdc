@@ -9,6 +9,7 @@ Build a timeline portfolio that proves elite frontend engineering (Next.js 15 + 
 # Hard invariants (never violate)
 - Never execute untrusted repo code on our infra. Previews are iframes of MY deployed demos, recorded media, or embeds — never a live build of an arbitrary repo.
 - authN ≠ authZ: "logged in" and "allowed" are separate checks. Admin writes always re-check an isAdmin allowlist.
+- Every privileged server operation must call require-admin() at the resource layer. Middleware is UX only, never the security boundary.
 - Metrics writes are fire-and-forget and must never block or break the UI.
 - No secrets in git. Server-only for tokens/keys.
 - TypeScript strict; named exports; no `any` without a written reason.

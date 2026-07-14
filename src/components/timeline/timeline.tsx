@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useScroll } from "motion/react";
-import type { ProjectEntry } from "@/lib/content";
+import type { TimelineProject } from "@/lib/content";
 import { TimelineLine } from "./timeline-line";
 import { ProjectCard } from "./project-card";
 
@@ -10,7 +10,7 @@ import { ProjectCard } from "./project-card";
 const PAGE_SIZE = 6;
 
 interface TimelineProps {
-  projects: ProjectEntry[];
+  projects: TimelineProject[];
 }
 
 /**

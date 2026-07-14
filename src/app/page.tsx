@@ -2,7 +2,7 @@ import { SiteHeading } from "@/components/site-heading";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Timeline } from "@/components/timeline/timeline";
 import { getPublishedProjectEntries } from "@/db/queries";
-import type { ProjectEntry } from "@/lib/content";
+import type { TimelineProject } from "@/lib/content";
 
 /**
  * ISR (Slice 2): this Server Component has no dynamic APIs (no cookies,
@@ -22,7 +22,7 @@ export const revalidate = 3600;
  * empty state below instead, and the next ISR regeneration retries once the
  * DB is reachable again.
  */
-async function loadPublishedProjects(): Promise<ProjectEntry[]> {
+async function loadPublishedProjects(): Promise<TimelineProject[]> {
   try {
     return await getPublishedProjectEntries();
   } catch (error) {

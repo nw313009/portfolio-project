@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { projectEntryToInsertRow, projectRowToEntry } from "@/db/mappers";
+import {
+  projectEntryToInsertRow,
+  projectRowToEntry,
+  projectRowToTimelineNode,
+} from "@/db/mappers";
 import type { ProjectEntry } from "@/lib/content";
 import type { ProjectRow } from "@/db/schema";
 
@@ -83,5 +87,62 @@ describe("projectRowToEntry", () => {
       preview: { previewType: "webapp" } as ProjectRow["preview"],
     };
     expect(() => projectRowToEntry(corrupt)).toThrow();
+  });
+});
+
+/** A GitHub-ingested row: no `preview` jsonb, but `previewType`/`demoUrl` set. */
+function metadataOnlyRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
+  const now = new Date();
+  return {
+    id: "octocat-hello-world",
+    slug: "octocat-hello-world",
+    title: "Hello-World",
+    startDate: "2011-01-26",
+    endDate: null,
+    stack: [],
+    languages: ["TypeScript"],
+    summary: "My first repository on GitHub!",
+    githubUrl: "https://github.com/octocat/Hello-World",
+    preview: null,
+    body: "",
+    status: "published",
+    mediaUrl: null,
+    githubOwner: "octocat",
+    githubRepo: "Hello-World",
+    primaryLanguage: "TypeScript",
+    stars: 7,
+    topics: ["demo"],
+    githubCreatedAt: now,
+    githubPushedAt: now,
+    homepageUrl: null,
+    metadataFetchedAt: now,
+    demoUrl: "https://demo.example.com",
+    previewType: "webapp",
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+describe("projectRowToTimelineNode", () => {
+  it("maps a GitHub-ingested row (no preview jsonb) to a metadata-only node", () => {
+    const node = projectRowToTimelineNode(metadataOnlyRow());
+    expect(node.preview).toBeUndefined();
+    expect(node.title).toBe("Hello-World");
+    expect(node.summary).toBe("My first repository on GitHub!");
+    expect(node.stack).toEqual([]);
+    expect(node.githubUrl).toBe("https://github.com/octocat/Hello-World");
+  });
+
+  it("keeps the full preview for a seeded MDX row that has one", () => {
+    const row = toRow(webappEntry, "published");
+    const node = projectRowToTimelineNode(row);
+    expect(node.preview).toEqual(webappEntry.preview);
+  });
+
+  it("throws on a corrupt metadata-only row (e.g. bad startDate) rather than serving it", () => {
+    expect(() =>
+      projectRowToTimelineNode(metadataOnlyRow({ startDate: "not-a-date" })),
+    ).toThrow();
   });
 });
