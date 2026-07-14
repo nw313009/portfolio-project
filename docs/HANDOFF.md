@@ -28,19 +28,19 @@ Context7 (current API docs — auto-invoked), Playwright (visual verification + 
 ## Where we are RIGHT NOW
 - **Phase 1: COMPLETE** — timeline frontend built, tested, deployed to Vercel.
 - **Phase 2: IN PROGRESS.**
-  - **Slice 1 (data layer): COMPLETE + committed to git.** Neon + Drizzle; tables projects/events/audit_log; events.ts and events.(projectId,ts) indexed; events has NO FK to projects (archival-friendly). Driver split wired (neon-http reads / neon-serverless Pool transactional writes). Integration tests run for real against the Neon **test** branch. NOTE/gotcha caught: drizzle-kit's own dotenv reload silently redirected the test-branch migration back to dev while reporting success — verify against information_schema directly, and ensure the fix is durable/committed so it can't regress.
-  - **Slice 2 (read path on DB): STARTING NOW** — migrate MDX projects into the DB, render timeline from Drizzle via neon-http + ISR, public read path stays cached with no auth. Must PROVE the timeline reads from the DB, not MDX.
-- **External accounts:** `.env.local` fully populated and matches `.env.example` (Neon x3, AUTH_SECRET, GitHub OAuth pair, ADMIN_EMAILS, GITHUB_TOKEN, Blob token, Upstash pair). `.gitignore` now correctly ignores `.env.local` (was briefly missing — fixed; confirmed not tracked). Vercel env-var mirroring is IN PROGRESS (being completed while Slice 2 runs). Blob connect hit an "already connected" conflict — treated as benign; token exists.
+  - **Slice 1 (data layer): COMPLETE + committed.** Neon + Drizzle; tables projects/events/audit_log; events.ts and events.(projectId,ts) indexed; events has NO FK to projects (archival-friendly). Driver split wired (neon-http reads / neon-serverless Pool transactional writes). Integration tests run for real against the Neon **test** branch. Gotcha caught: drizzle-kit's dotenv reload silently redirected the test-branch migration back to dev while reporting success — verify against information_schema directly; fix committed.
+  - **Slice 2 (read path on DB): COMPLETE + accepted.** page.tsx is now an async Server Component reading getPublishedProjectEntries() via neon-http instead of MDX; ISR via `export const revalidate = 3600`; public read path stays static/cached, no auth. Idempotent seed (`pnpm db:seed`, onConflictDoUpdate). Presentation untouched. Gate green: typecheck/lint/build/test (69/69) + e2e (8/8) against the DB-backed build. Bugs fixed: top-level await in seed under CJS; clock skew between Node `new Date()` and Postgres defaultNow() → standardized on `sql now()`. Commit at this checkpoint.
+  - **Slice 3 (auth): NEXT — the HARD-PAUSE slice.** Auth.js v5 GitHub OAuth (authN) + isAdmin allowlist in middleware on all /admin + write routes (authZ), kept separate. STOP for review before Slice 4; verify boundary (unauth rejected on /admin + writes; logged-in non-allowlisted denied; only ADMIN_EMAILS passes). Use Opus 4.8.
+- **Environment (resolved, logged in PROGRESS.md):** Node/npm/pnpm now on the persistent Windows PATH (agent runs PowerShell; user's Git Bash fixed via .bashrc). Playwright Chromium installed — add a `playwright install` postinstall guard so a clean clone can't regress. Node is v23 (non-LTS) — fine for now, consider LTS later, not mid-phase.
+- **External accounts:** `.env.local` fully populated, matches `.env.example`. `.gitignore` correctly ignores `.env.local` (was briefly missing — fixed, confirmed untracked). **Vercel mirror COMPLETE** — all 10 Phase 2 vars present with prod values (DATABASE_URL must be the `main` branch string; TEST_DATABASE_URL correctly excluded). Vercel vars apply on next deploy; add prod GitHub OAuth callback URL at deploy time.
 
 ## Deferred backlog (not scheduled)
 - Events retention/archival: move old rows to cold storage or roll up into aggregates on a schedule. Fine to defer — no traffic yet. Phase 2 kept the schema archival-friendly (indexed ts, no blocking FKs) so this stays a background job later, not a migration.
 
 ## Immediate next steps
-1. Run Slice 2 (fresh Cursor chat, Sonnet 5, read PROGRESS.md first) — prompt is in this session / matches the Slice 2 pattern in PHASES.md.
-2. Finish mirroring env vars into Vercel (prod values; DATABASE_URL must be the `main` branch string, not dev). Only needed before the next DEPLOY, not before each slice.
-3. **Slice 3 (auth) is the hard-pause slice** — verify the authN≠authZ boundary (unauth rejected on /admin + write routes; logged-in non-allowlisted denied; only ADMIN_EMAILS passes) BEFORE any write path is built on top.
-4. Continue Slices 4 (GitHub ingestion) and 5 (events + dashboard), gating each.
-5. At deploy time: add the prod GitHub OAuth callback URL (https://<domain>/api/auth/callback/github) to the existing OAuth app.
+1. **Slice 3 (auth)** — fresh Cursor chat, **Opus 4.8**, read PROGRESS.md first. Build Auth.js v5 + isAdmin middleware. STOP at the auth boundary for review before Slice 4.
+2. Then Slice 4 (GitHub ingestion) and Slice 5 (events + dashboard), gating each.
+3. First DB-backed **deploy** happens at end of a slice — ensure Vercel `DATABASE_URL` = `main` branch, add prod OAuth callback URL then.
 
 ## Assistant's standing instructions
 Architect and direct; keep Cursor from losing the goal or drifting past scope; give exact step-by-step for every external tool without assuming prior knowledge; review each slice against its Definition of Done; hold the Slice 3 auth pause firmly; remember the reasoning behind every locked decision above.
