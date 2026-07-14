@@ -145,4 +145,38 @@ describe("projectRowToTimelineNode", () => {
       projectRowToTimelineNode(metadataOnlyRow({ startDate: "not-a-date" })),
     ).toThrow();
   });
+
+  it("carries a validated https demoUrl through for a metadata-only node", () => {
+    const node = projectRowToTimelineNode(
+      metadataOnlyRow({ demoUrl: "https://demo.example.com" }),
+    );
+    expect(node.demoUrl).toBe("https://demo.example.com");
+  });
+
+  it("carries demoUrl through even alongside a full preview (independent fields)", () => {
+    const row = toRow(webappEntry, "published");
+    const node = projectRowToTimelineNode({
+      ...row,
+      demoUrl: "https://demo.example.com",
+    });
+    expect(node.demoUrl).toBe("https://demo.example.com");
+    expect(node.preview).toEqual(webappEntry.preview);
+  });
+
+  it("leaves demoUrl undefined when the column is absent", () => {
+    const node = projectRowToTimelineNode(metadataOnlyRow({ demoUrl: null }));
+    expect(node.demoUrl).toBeUndefined();
+  });
+
+  it("throws instead of serving a non-https demoUrl (never loosen validation)", () => {
+    expect(() =>
+      projectRowToTimelineNode(metadataOnlyRow({ demoUrl: "http://insecure.example.com" })),
+    ).toThrow();
+  });
+
+  it("throws instead of serving a malformed demoUrl", () => {
+    expect(() =>
+      projectRowToTimelineNode(metadataOnlyRow({ demoUrl: "not-a-url" })),
+    ).toThrow();
+  });
 });

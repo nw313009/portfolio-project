@@ -1,4 +1,4 @@
-import { projectMetadataSchema, projectSchema } from "@/lib/project-schema";
+import { httpsUrlSchema, projectMetadataSchema, projectSchema } from "@/lib/project-schema";
 import type { ProjectEntry, TimelineProject } from "@/lib/content";
 import type { NewProjectRow, ProjectRow } from "@/db/schema";
 
@@ -33,6 +33,11 @@ export function projectRowToEntry(row: ProjectRow): ProjectEntry {
  * keeps its preview. A row WITHOUT one (GitHub-ingested, Slice 4) is validated
  * through the preview-less `projectMetadataSchema` and renders metadata-only.
  * Either way a corrupt row throws here instead of reaching the timeline.
+ *
+ * `demoUrl` (the flat `demo_url` column) is independent of `preview` and is
+ * re-validated as https on every read — never trust the stored string alone —
+ * so a row hand-edited to a plain-http (or otherwise malformed) URL throws
+ * here instead of rendering an unsafe outbound link.
  */
 export function projectRowToTimelineNode(row: ProjectRow): TimelineProject {
   const base = {
@@ -46,14 +51,15 @@ export function projectRowToTimelineNode(row: ProjectRow): TimelineProject {
     summary: row.summary,
     githubUrl: row.githubUrl,
   };
+  const demoUrl = row.demoUrl != null ? httpsUrlSchema.parse(row.demoUrl) : undefined;
 
   if (row.preview != null) {
     const project = projectSchema.parse({ ...base, preview: row.preview });
-    return { ...project, body: row.body };
+    return { ...project, body: row.body, demoUrl };
   }
 
   const metadata = projectMetadataSchema.parse(base);
-  return { ...metadata, body: row.body, preview: undefined };
+  return { ...metadata, body: row.body, preview: undefined, demoUrl };
 }
 
 /**

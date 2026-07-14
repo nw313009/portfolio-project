@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { ProjectCard } from "@/components/timeline/project-card";
-import type { ProjectEntry } from "@/lib/content";
+import type { ProjectEntry, TimelineProject } from "@/lib/content";
 
 const originalMatchMedia = window.matchMedia;
 
@@ -84,6 +84,28 @@ describe("ProjectCard", () => {
     const article = screen.getByRole("article");
     expect(article).toHaveAttribute("tabindex", "0");
     expect(article).toHaveAccessibleName("Demo Project");
+  });
+
+  it('renders a "Live demo ↗" link with the correct href and rel when demoUrl is present', () => {
+    const metadataOnlyProject: TimelineProject = {
+      ...webappProject,
+      preview: undefined,
+      demoUrl: "https://demo.example.com",
+    };
+    render(<ProjectCard project={metadataOnlyProject} />);
+    const link = screen.getByRole("link", { name: /Live demo/i });
+    expect(link).toHaveAttribute("href", "https://demo.example.com");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+
+  it('renders no "Live demo ↗" link and is otherwise unchanged when demoUrl is absent (MDX-seeded projects)', () => {
+    render(<ProjectCard project={webappProject} />);
+    expect(
+      screen.queryByRole("link", { name: /Live demo/i }),
+    ).not.toBeInTheDocument();
+    // Untouched: the existing webapp preview demo link still renders.
+    expect(screen.getByRole("link", { name: /^Demo/i })).toBeInTheDocument();
   });
 
   it("becomes fully visible when reduced motion is preferred, even though this environment's IntersectionObserver never fires", async () => {

@@ -23,6 +23,16 @@ export type PreviewType = (typeof PREVIEW_TYPES)[number];
 const assetPath = z.string().min(1);
 
 /**
+ * A URL that must use https. Used for the top-level `demoUrl` a GitHub-ingested
+ * project persists (`src/db/schema.ts`'s `demo_url` column) — it's pasted and
+ * stored, never fetched, and the public read path re-validates it on the way
+ * out so a corrupt/loosened row can't surface a plaintext link.
+ */
+export const httpsUrlSchema = z.url().refine((value) => value.startsWith("https://"), {
+  message: "URL must use https.",
+});
+
+/**
  * Every variant below uses `z.strictObject` (not the default `z.object`, which
  * silently *strips* unknown keys) so cross-variant leakage is a hard parse
  * error, not a silent drop. A `cli` entry that also sets `demoUrl` - the

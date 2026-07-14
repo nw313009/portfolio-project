@@ -94,6 +94,20 @@ export function ProjectCard({ project, side = "left" }: ProjectCardProps) {
               Demo ↗
             </a>
           ) : null}
+          {/* Independent of `preview`/`previewType` — a flat outbound link
+              rendered purely on presence of the (validated-https) `demoUrl`
+              column, so a metadata-only (GitHub-ingested) node gets a demo
+              link even though it has no preview surface yet. */}
+          {project.demoUrl ? (
+            <a
+              href={project.demoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium underline-offset-4 hover:underline"
+            >
+              Live demo ↗
+            </a>
+          ) : null}
         </CardFooter>
       </Card>
     </motion.article>

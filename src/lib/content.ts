@@ -10,9 +10,14 @@ export type ProjectEntry = Project & { body: string };
  * metadata-only nodes with no preview surface yet, so their `preview` is
  * absent. The seeded MDX projects still carry their full discriminated-union
  * `preview`. Rendering the surface for either lives in the later preview slice.
+ *
+ * `demoUrl` is the flat, validated-https link a GitHub-ingested project
+ * persists directly (independent of `preview` — MDX rows never set it, so
+ * they're unaffected). It's a plain outbound link, not a preview surface.
  */
 export type TimelineProject = Omit<ProjectEntry, "preview"> & {
   preview?: Preview;
+  demoUrl?: string;
 };
 
 /**
