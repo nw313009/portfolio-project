@@ -8,11 +8,14 @@ import {
   deleteAuditLogById,
   deleteEventsByProjectId,
   deleteProject,
+  getEventAggregates,
   getProjectById,
   getPublishedProjectEntries,
   getPublishedProjects,
   insertAuditLog,
   insertProject,
+  projectExists,
+  recordEvent,
   setProjectStatusWithAudit,
   upsertProject,
 } from "@/db/queries";
@@ -271,5 +274,70 @@ describe.skipIf(!hasDb)("createProjectWithAudit / setProjectStatusWithAudit", ()
     await expect(
       createProjectWithAudit(duplicate, "admin@example.com"),
     ).rejects.toBeInstanceOf(DuplicateProjectError);
+  });
+});
+
+/**
+ * Slice 5 events + aggregates against the real Neon `test` branch: writes go
+ * through the Pool writer (`recordEvent`), reads through the aggregate helper
+ * (`getEventAggregates`), and `projectExists` gates the public write path.
+ * The per-project counts are asserted exactly for this fixture's own id;
+ * table-wide sums (`totalEvents`, `sessions`, `recentCount`) are asserted as
+ * lower bounds so the test doesn't assume the branch starts empty.
+ */
+describe.skipIf(!hasDb)("recordEvent / getEventAggregates / projectExists", () => {
+  const eventProjectId = `test-events-${randomUUID()}`;
+  const sessionA = randomUUID();
+  const sessionB = randomUUID();
+
+  const projectRow: NewProjectRow = {
+    id: eventProjectId,
+    slug: eventProjectId,
+    title: "Events Fixture",
+    startDate: "2018-03-03",
+    endDate: null,
+    stack: [],
+    languages: ["TypeScript"],
+    summary: "A fixture project for event aggregation.",
+    githubUrl: "https://github.com/example/events-fixture",
+    preview: { previewType: "webapp", demoUrl: "https://example.com" },
+    status: "published",
+  };
+
+  afterAll(async () => {
+    await deleteEventsByProjectId(eventProjectId);
+    await deleteProject(eventProjectId);
+  });
+
+  it("projectExists reflects insertion", async () => {
+    expect(await projectExists(eventProjectId)).toBe(false);
+    await insertProject(projectRow);
+    expect(await projectExists(eventProjectId)).toBe(true);
+  });
+
+  it("records events via the Pool writer with a server-derived timestamp", async () => {
+    // 3 views + 2 preview-opens (hover) + 1 demo-open, across two sessions.
+    await recordEvent({ projectId: eventProjectId, type: "view", sessionId: sessionA });
+    await recordEvent({ projectId: eventProjectId, type: "view", sessionId: sessionA });
+    await recordEvent({ projectId: eventProjectId, type: "view", sessionId: sessionB });
+    await recordEvent({ projectId: eventProjectId, type: "hover", sessionId: sessionA });
+    await recordEvent({ projectId: eventProjectId, type: "hover", sessionId: sessionB });
+    await recordEvent({ projectId: eventProjectId, type: "demo-open", sessionId: sessionB });
+
+    const aggregates = await getEventAggregates();
+    const mine = aggregates.perProject.find((p) => p.projectId === eventProjectId);
+    expect(mine).toEqual({
+      projectId: eventProjectId,
+      view: 3,
+      hover: 2,
+      demoOpen: 1,
+      total: 6,
+    });
+
+    // Table-wide sums include at least this fixture's contribution.
+    expect(aggregates.totalEvents).toBeGreaterThanOrEqual(6);
+    expect(aggregates.recentCount).toBeGreaterThanOrEqual(6);
+    expect(aggregates.sessions).toBeGreaterThanOrEqual(2);
+    expect(aggregates.totalsByType.view).toBeGreaterThanOrEqual(3);
   });
 });

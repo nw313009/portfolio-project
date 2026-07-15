@@ -13,6 +13,12 @@ interface WebappPreviewProps {
   demoUrl: string;
   poster?: string;
   title: string;
+  /**
+   * Called ONLY on a deliberate "Preview" button click (a real user action),
+   * never on hover-intent — hover is noisy, has no touch equivalent, and isn't
+   * intent. Used to record the "preview opened" engagement event.
+   */
+  onExpand?: () => void;
 }
 
 /**
@@ -30,12 +36,20 @@ interface WebappPreviewProps {
  * loaded, and additionally treats a `load` event that never fires within
  * `LOAD_TIMEOUT_MS` (a genuine non-response) as a failure.
  */
-export function WebappPreview({ demoUrl, poster, title }: WebappPreviewProps) {
+export function WebappPreview({ demoUrl, poster, title, onExpand }: WebappPreviewProps) {
   const [status, setStatus] = useState<Status>("idle");
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function startLoading() {
     setStatus((current) => (current === "idle" ? "loading" : current));
+  }
+
+  // Deliberate button click = "preview opened". Kept separate from
+  // `startLoading` (which the hover-intent path also calls) so hover NEVER
+  // records the event.
+  function handleExpandClick() {
+    startLoading();
+    onExpand?.();
   }
 
   function handleMouseEnter() {
@@ -72,7 +86,7 @@ export function WebappPreview({ demoUrl, poster, title }: WebappPreviewProps) {
       >
         <button
           type="button"
-          onClick={startLoading}
+          onClick={handleExpandClick}
           className="relative z-10 inline-flex items-center gap-2 rounded-full bg-background/90 px-4 py-2 text-sm font-medium shadow-sm ring-1 ring-border transition hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Play className="size-4" aria-hidden="true" />

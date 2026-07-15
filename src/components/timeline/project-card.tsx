@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
+import { track } from "@/lib/track";
 import {
   Card,
   CardContent,
@@ -24,9 +26,30 @@ export function ProjectCard({ project, side = "left" }: ProjectCardProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const titleId = `${project.slug}-title`;
   const offsetX = side === "left" ? -24 : 24;
+  const cardRef = useRef<HTMLElement>(null);
+
+  // Record a `view` the first time this node enters the viewport, then stop
+  // observing (one view per project per page load). Fire-and-forget; a failure
+  // never affects rendering. Runs only in the browser.
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          track(project.id, "view");
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.3 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [project.id]);
 
   return (
     <motion.article
+      ref={cardRef}
       tabIndex={0}
       aria-labelledby={titleId}
       className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -72,7 +95,11 @@ export function ProjectCard({ project, side = "left" }: ProjectCardProps) {
               payload yet; the preview surface renders in the later preview
               slice. Only render it when a full preview is present. */}
           {project.preview ? (
-            <ProjectPreview preview={project.preview} title={project.title} />
+            <ProjectPreview
+              preview={project.preview}
+              title={project.title}
+              onExpand={() => track(project.id, "hover")}
+            />
           ) : null}
         </CardContent>
         <CardFooter className="gap-4">
@@ -89,6 +116,7 @@ export function ProjectCard({ project, side = "left" }: ProjectCardProps) {
               href={project.preview.demoUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => track(project.id, "demo-open")}
               className="text-sm font-medium underline-offset-4 hover:underline"
             >
               Demo ↗
@@ -103,6 +131,7 @@ export function ProjectCard({ project, side = "left" }: ProjectCardProps) {
               href={project.demoUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => track(project.id, "demo-open")}
               className="text-sm font-medium underline-offset-4 hover:underline"
             >
               Live demo ↗

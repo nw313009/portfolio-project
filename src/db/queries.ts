@@ -1,4 +1,4 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { txDb } from "@/db/tx-client";
 import { auditLog, events, projects } from "@/db/schema";
@@ -215,6 +215,121 @@ export async function deleteProject(id: string): Promise<void> {
 export async function appendEvent(row: NewEventRow): Promise<EventRow> {
   const [inserted] = await db.insert(events).values(row).returning();
   return inserted;
+}
+
+/**
+ * Cheap existence check used by the public event beacon to validate that a
+ * `projectId` refers to a KNOWN project before recording an event — without
+ * adding a foreign key on `events` (the table is deliberately FK-free so old
+ * rows stay archival/deletable). Read path, so it uses the `neon-http` client.
+ */
+export async function projectExists(id: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(eq(projects.id, id))
+    .limit(1);
+  return row != null;
+}
+
+/**
+ * Records a single anonymous engagement event through the **Pool writer**
+ * (`neon-serverless`, per the Slice 1 driver split: reads = `neon-http`, writes
+ * = Pool). `ts` is intentionally omitted so it defaults to the database's own
+ * `now()` — the timestamp is ALWAYS server-derived, never client-supplied.
+ * Fire-and-forget from the caller's perspective; failures must never surface to
+ * the visitor.
+ */
+export async function recordEvent(row: NewEventRow): Promise<void> {
+  await txDb.insert(events).values(row);
+}
+
+/** Per-project engagement counts, one row per project that has any events. */
+export interface ProjectEventCounts {
+  projectId: string;
+  view: number;
+  /** Legacy enum label `hover`; surfaced as "Preview opened" in the UI. */
+  hover: number;
+  demoOpen: number;
+  total: number;
+}
+
+/** Aggregate reads for the admin dashboard. Counts only — never identity. */
+export interface EventAggregates {
+  perProject: ProjectEventCounts[];
+  totalsByType: { view: number; hover: number; demoOpen: number };
+  totalEvents: number;
+  /** Events in the last 7 days (uses the `events_ts_idx`). */
+  recentCount: number;
+  /**
+   * Distinct ephemeral session ids — reported as "sessions", NEVER "unique
+   * visitors". A session id is a per-page-load correlation id, not a person.
+   */
+  sessions: number;
+}
+
+/**
+ * Aggregate engagement for the admin dashboard. Aggregate reads ONLY (grouped
+ * counts + a windowed count + a distinct-session count) via the `neon-http`
+ * read client — it never scans-and-maps individual event rows. Grouping by
+ * `(project_id, type)` is served by the `events_project_ts_idx` composite index
+ * and the 7-day window by `events_ts_idx`.
+ */
+export async function getEventAggregates(): Promise<EventAggregates> {
+  const grouped = await db
+    .select({
+      projectId: events.projectId,
+      type: events.type,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(events)
+    .groupBy(events.projectId, events.type);
+
+  const byProject = new Map<string, ProjectEventCounts>();
+  const totalsByType = { view: 0, hover: 0, demoOpen: 0 };
+  let totalEvents = 0;
+
+  for (const { projectId, type, count } of grouped) {
+    const entry =
+      byProject.get(projectId) ??
+      ({ projectId, view: 0, hover: 0, demoOpen: 0, total: 0 } satisfies ProjectEventCounts);
+
+    // Only the three in-scope event types are recorded by this slice; a
+    // legacy row of another type (e.g. `outbound-click`) still counts toward
+    // the project total but has no dedicated column here.
+    if (type === "view") {
+      entry.view += count;
+      totalsByType.view += count;
+    } else if (type === "hover") {
+      entry.hover += count;
+      totalsByType.hover += count;
+    } else if (type === "demo-open") {
+      entry.demoOpen += count;
+      totalsByType.demoOpen += count;
+    }
+    entry.total += count;
+    totalEvents += count;
+    byProject.set(projectId, entry);
+  }
+
+  const perProject = [...byProject.values()].sort((a, b) => b.total - a.total);
+
+  const [recent] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(events)
+    .where(gte(events.ts, sql`now() - interval '7 days'`));
+
+  const [sessionsRow] = await db
+    .select({ sessions: sql<number>`count(distinct ${events.sessionId})::int` })
+    .from(events);
+
+  return {
+    perProject,
+    totalsByType,
+    totalEvents,
+    recentCount: recent?.count ?? 0,
+    sessions: sessionsRow?.sessions ?? 0,
+  };
 }
 
 export async function deleteEventsByProjectId(

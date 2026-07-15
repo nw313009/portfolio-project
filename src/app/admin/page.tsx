@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { getAllProjects } from "@/db/queries";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +24,15 @@ export default async function AdminPage() {
   return (
     <main className="mx-auto max-w-3xl space-y-10 p-8">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Admin</h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-2xl font-semibold">Admin</h1>
+          <Link
+            href="/admin/dashboard"
+            className="text-sm font-medium underline-offset-4 hover:underline"
+          >
+            Engagement →
+          </Link>
+        </div>
         <p className="text-sm text-muted-foreground">
           Signed in as {session.user?.email}.
         </p>

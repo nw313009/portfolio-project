@@ -107,10 +107,19 @@ describe("Timeline pagination", () => {
     makeProject(`p${index}`, `Project ${index}`, `2020-${String(index + 1).padStart(2, "0")}-01`),
   );
 
+  // Each ProjectCard also observes its own <article> to fire a one-shot `view`
+  // event (Slice 5), so isolate the pagination sentinel — the only observed
+  // element that is not an <article> — when asserting sentinel behavior.
+  function sentinelObservations() {
+    return observeSpy.mock.calls.filter(
+      ([target]) => (target as Element).tagName !== "ARTICLE",
+    );
+  }
+
   it("only mounts the first page of cards and observes a sentinel", () => {
     const { container } = render(<Timeline projects={manyProjects} />);
     expect(container.querySelectorAll("ol > li")).toHaveLength(6);
-    expect(observeSpy).toHaveBeenCalledTimes(1);
+    expect(sentinelObservations()).toHaveLength(1);
   });
 
   it("reveals the next page once the sentinel intersects", () => {
@@ -128,6 +137,6 @@ describe("Timeline pagination", () => {
 
   it("does not observe a sentinel once every project is already visible", () => {
     render(<Timeline projects={projects} />);
-    expect(observeSpy).not.toHaveBeenCalled();
+    expect(sentinelObservations()).toHaveLength(0);
   });
 });

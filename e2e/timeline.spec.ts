@@ -25,10 +25,27 @@ async function scrollPageBy(page: Page, deltaY: number) {
 }
 
 test.describe("Timeline acceptance", () => {
-  test("renders every project's card, in oldest-first date order", async ({ page }) => {
+  test("renders the canonical projects in oldest-first date order (subsequence; tolerates ingested projects)", async ({
+    page,
+  }) => {
+    // The timeline is DB-driven as of Slice 2, and Slice 4 made ingestion a
+    // feature — the set of published projects is legitimately open-ended, so an
+    // exact-set assertion would break every time a project is added. Assert a
+    // SUBSEQUENCE instead: all 4 canonical MDX titles must be present AND in
+    // oldest-first order, tolerating ingested rows interleaved. This preserves
+    // the test's intent (chronological ordering) without pinning the full set.
     await page.goto("/");
     const headings = page.getByRole("heading", { level: 2 });
-    await expect(headings).toHaveText(PROJECT_TITLES_OLDEST_FIRST);
+
+    await expect(async () => {
+      const rendered = await headings.allInnerTexts();
+      const canonicalInOrder = rendered.filter((title) =>
+        PROJECT_TITLES_OLDEST_FIRST.includes(title),
+      );
+      // Equality here means: every canonical title appears exactly once, and
+      // their relative order is oldest-first. Missing or reordered → fails.
+      expect(canonicalInOrder).toEqual(PROJECT_TITLES_OLDEST_FIRST);
+    }).toPass({ timeout: 10_000 });
   });
 
   test("scrolling advances the center line's draw progress", async ({ page }) => {
