@@ -1,6 +1,7 @@
 import { SiteHeading } from "@/components/site-heading";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Timeline } from "@/components/timeline/timeline";
+import { VisitorCard } from "@/components/visitor-card";
 import { getPublishedProjectEntries } from "@/db/queries";
 import type { TimelineProject } from "@/lib/content";
 
@@ -52,6 +53,12 @@ export default async function Home() {
           No projects to show yet — check back soon.
         </p>
       )}
+      {/*
+        Optional "who's visiting" card at the END of the timeline (Slice 6).
+        A client component that only POSTs on a deliberate submit, so `/` stays
+        statically prerendered + ISR — it never fetches during render.
+      */}
+      <VisitorCard />
     </main>
   );
 }

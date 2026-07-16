@@ -50,3 +50,47 @@ export async function checkEventRateLimit(
     return { success: true };
   }
 }
+
+/**
+ * MUCH TIGHTER per-IP limit for the "who's visiting" contact card (Slice 6):
+ * this is a once-per-visitor action, not a per-scroll beacon, and its abuse
+ * target is the admin's INBOX. A handful of submissions per IP per hour covers
+ * a genuine retry/typo without opening an email-bomb vector.
+ */
+const CONTACT_LIMIT = 3;
+const CONTACT_WINDOW = "1 h" as const;
+
+let contactInstance: Ratelimit | undefined;
+
+function getContactRateLimiter(): Ratelimit {
+  if (!contactInstance) {
+    contactInstance = new Ratelimit({
+      redis: Redis.fromEnv(),
+      limiter: Ratelimit.slidingWindow(CONTACT_LIMIT, CONTACT_WINDOW),
+      prefix: "ratelimit:contact",
+    });
+  }
+  return contactInstance;
+}
+
+/**
+ * Returns whether a contact submission from `ip` is within the rate limit.
+ *
+ * FAIL-CLOSED by design — the OPPOSITE of the events beacon. Because the abuse
+ * target is the admin's inbox, if Upstash is unreachable we deny rather than
+ * allow: silently dropping a rare legitimate submission during an infra blip is
+ * strictly safer than leaving the inbox unprotected. The caller treats a denial
+ * OPAQUELY (same response as success — see the route), so this never reveals to
+ * a spammer that (or why) they were throttled.
+ */
+export async function checkContactRateLimit(
+  ip: string,
+): Promise<{ success: boolean }> {
+  try {
+    const { success } = await getContactRateLimiter().limit(ip);
+    return { success };
+  } catch (error) {
+    console.error("[contact] rate limit check failed; denying (fail-closed)", error);
+    return { success: false };
+  }
+}
