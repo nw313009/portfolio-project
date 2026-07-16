@@ -121,13 +121,19 @@ test.describe("Timeline acceptance", () => {
     const count = await cardArticles.count();
     expect(count).toBeGreaterThanOrEqual(2);
 
-    const boxes = await cardArticles.evaluateAll((elements) =>
-      elements.map((el) => el.getBoundingClientRect().x),
-    );
-    const [firstX, ...restX] = boxes;
-    for (const x of restX) {
-      expect(x).toBeCloseTo(firstX, 0);
-    }
+    // Reading getBoundingClientRect() immediately after `goto` can catch a
+    // card mid-layout under parallel-worker contention (observed: x=120 vs
+    // the settled 72) — poll for the settled position instead of trusting a
+    // single snapshot. The alignment tolerance itself is unchanged.
+    await expect(async () => {
+      const boxes = await cardArticles.evaluateAll((elements) =>
+        elements.map((el) => el.getBoundingClientRect().x),
+      );
+      const [firstX, ...restX] = boxes;
+      for (const x of restX) {
+        expect(x).toBeCloseTo(firstX, 0);
+      }
+    }).toPass({ timeout: 5_000 });
   });
 
   test("loads, scrolls, and previews a webapp with zero console errors", async ({ page }) => {
