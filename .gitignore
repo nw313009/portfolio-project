@@ -46,6 +46,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the names-only example contract: it MUST be tracked so a fresh clone
+# knows which env vars exist. Real values never live here (see the header).
+!.env.example
 
 # vercel
 .vercel
