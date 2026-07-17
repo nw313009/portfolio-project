@@ -21,6 +21,16 @@ if (!url) {
   process.exit(1);
 }
 
+// Echo the host (never the credentials) so a deploy-time run makes the target
+// branch UNMISTAKABLE — the whole point of this gate is to confirm you're
+// pointed at the branch you think you are before migrating it.
+try {
+  console.log(`[${target}] host: ${new URL(url).host}`);
+} catch {
+  console.error(`[${target}] is not a valid URL: ${url}`);
+  process.exit(1);
+}
+
 const sql = neon(url);
 const rows = await sql`
   SELECT count(*)::int AS violations
