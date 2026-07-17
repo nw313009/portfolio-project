@@ -62,21 +62,50 @@ describe("ProjectCard", () => {
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
 
-  it("shows a demo link for a webapp preview", () => {
+  it("renders exactly ONE demo anchor for a webapp preview, sourced from preview.demoUrl", () => {
     render(<ProjectCard project={webappProject} />);
-    expect(screen.getByRole("link", { name: /Demo/i })).toHaveAttribute(
+    const links = screen.getAllByRole("link", { name: /Live demo/i });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "https://example.com");
+    expect(links[0]).toHaveAttribute("target", "_blank");
+    expect(links[0]).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+
+  it("renders exactly ONE demo anchor for a metadata-only node with a flat demoUrl", () => {
+    const metadataOnlyProject: TimelineProject = {
+      ...webappProject,
+      preview: undefined,
+      demoUrl: "https://demo.example.com",
+    };
+    render(<ProjectCard project={metadataOnlyProject} />);
+    const links = screen.getAllByRole("link", { name: /Live demo/i });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "https://demo.example.com");
+  });
+
+  it("keeps the demo link for a NON-webapp node that has a flat demoUrl", () => {
+    const libraryWithDemo: TimelineProject = {
+      ...webappProject,
+      preview: { previewType: "library", codeSnippet: "const x = 1;" },
+      demoUrl: "https://demo.example.com",
+    };
+    render(<ProjectCard project={libraryWithDemo} />);
+    expect(screen.getByRole("link", { name: /Live demo/i })).toHaveAttribute(
       "href",
-      "https://example.com",
+      "https://demo.example.com",
     );
   });
 
-  it("omits the demo link for non-webapp previews", () => {
-    const libraryProject: ProjectEntry = {
+  it("renders NO demo anchor when neither the union nor a flat demoUrl carries one", () => {
+    const libraryProject: TimelineProject = {
       ...webappProject,
       preview: { previewType: "library", codeSnippet: "const x = 1;" },
+      demoUrl: undefined,
     };
     render(<ProjectCard project={libraryProject} />);
-    expect(screen.queryByRole("link", { name: /Demo/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Live demo/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("is a keyboard-focusable article", () => {
@@ -84,28 +113,6 @@ describe("ProjectCard", () => {
     const article = screen.getByRole("article");
     expect(article).toHaveAttribute("tabindex", "0");
     expect(article).toHaveAccessibleName("Demo Project");
-  });
-
-  it('renders a "Live demo ↗" link with the correct href and rel when demoUrl is present', () => {
-    const metadataOnlyProject: TimelineProject = {
-      ...webappProject,
-      preview: undefined,
-      demoUrl: "https://demo.example.com",
-    };
-    render(<ProjectCard project={metadataOnlyProject} />);
-    const link = screen.getByRole("link", { name: /Live demo/i });
-    expect(link).toHaveAttribute("href", "https://demo.example.com");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
-  });
-
-  it('renders no "Live demo ↗" link and is otherwise unchanged when demoUrl is absent (MDX-seeded projects)', () => {
-    render(<ProjectCard project={webappProject} />);
-    expect(
-      screen.queryByRole("link", { name: /Live demo/i }),
-    ).not.toBeInTheDocument();
-    // Untouched: the existing webapp preview demo link still renders.
-    expect(screen.getByRole("link", { name: /^Demo/i })).toBeInTheDocument();
   });
 
   it("becomes fully visible when reduced motion is preferred, even though this environment's IntersectionObserver never fires", async () => {

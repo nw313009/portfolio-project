@@ -28,16 +28,28 @@ export function projectRowToEntry(row: ProjectRow): ProjectEntry {
 }
 
 /**
- * DB row -> validated timeline node for the public page. A row WITH a `preview`
- * jsonb (seeded MDX content) is validated through the full `projectSchema` and
- * keeps its preview. A row WITHOUT one (GitHub-ingested, Slice 4) is validated
- * through the preview-less `projectMetadataSchema` and renders metadata-only.
- * Either way a corrupt row throws here instead of reaching the timeline.
+ * DB row -> validated timeline node, and the SINGLE normalizer for the two
+ * storage shapes (the preview-rendering slice's Option B). Both shapes go in,
+ * one canonical representation comes out, and a corrupt row throws here instead
+ * of reaching the timeline:
  *
- * `demoUrl` (the flat `demo_url` column) is independent of `preview` and is
- * re-validated as https on every read — never trust the stored string alone —
- * so a row hand-edited to a plain-http (or otherwise malformed) URL throws
- * here instead of rendering an unsafe outbound link.
+ *  1. A row WITH a `preview` jsonb (hand-authored MDX content) → validated
+ *     through the full `projectSchema`, union kept as-is.
+ *  2. A flat GitHub-ingested row with `preview_type === "webapp"` AND a
+ *     `demo_url` → a `webapp` union variant is SYNTHESIZED from those columns
+ *     and re-validated through `projectSchema`. `webapp` is the only variant
+ *     whose required field (a demo URL) exists in the flat columns — `cli`
+ *     needs a cast/video, `service` a sample, `library` a snippet, `notebook`
+ *     two URLs, `media` an image set — so it's the only one we can manufacture.
+ *  3. Anything else → `projectMetadataSchema` (preview-less), `preview:
+ *     undefined`. `undefined` MEANS "no preview surface"; we deliberately do
+ *     NOT add a 7th "metadata" union variant to encode the absence of data.
+ *
+ * `demoUrl` (the flat `demo_url` column) is re-validated as https on every read
+ * — never trust the stored string alone — so a plain-http/malformed row throws
+ * here instead of rendering an unsafe link. It rides alongside the union as
+ * project metadata (like `githubUrl`), NOT as part of the preview surface; the
+ * renderer derives the single demo link from whichever shape holds the URL.
  */
 export function projectRowToTimelineNode(row: ProjectRow): TimelineProject {
   const base = {
@@ -53,11 +65,22 @@ export function projectRowToTimelineNode(row: ProjectRow): TimelineProject {
   };
   const demoUrl = row.demoUrl != null ? httpsUrlSchema.parse(row.demoUrl) : undefined;
 
+  // Shape 1 — rich MDX preview jsonb.
   if (row.preview != null) {
     const project = projectSchema.parse({ ...base, preview: row.preview });
     return { ...project, body: row.body, demoUrl };
   }
 
+  // Shape 2 — flat webapp: synthesize a `webapp` union from the flat columns.
+  if (row.previewType === "webapp" && demoUrl != null) {
+    const project = projectSchema.parse({
+      ...base,
+      preview: { previewType: "webapp", demoUrl },
+    });
+    return { ...project, body: row.body, demoUrl };
+  }
+
+  // Shape 3 — metadata-only node (no preview surface).
   const metadata = projectMetadataSchema.parse(base);
   return { ...metadata, body: row.body, preview: undefined, demoUrl };
 }

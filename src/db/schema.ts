@@ -1,4 +1,5 @@
 import {
+  check,
   index,
   integer,
   jsonb,
@@ -9,6 +10,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { Preview } from "@/lib/project-schema";
 import { PREVIEW_TYPES } from "@/lib/project-schema";
 
@@ -87,6 +89,17 @@ export const projects = pgTable(
     unique("projects_github_owner_repo_unique").on(
       table.githubOwner,
       table.githubRepo,
+    ),
+    // Exactly one preview SHAPE per row: either the rich MDX `preview` jsonb,
+    // OR the flat ingested fields (`preview_type` + `demo_url`) — never both.
+    // The read-path mapper (`projectRowToTimelineNode`) normalizes both shapes
+    // into one union, and this promotes that "mutually exclusive" invariant
+    // from convention to a schema fact so a both-shapes row can't be written
+    // (which would make the mapper's demo-link derivation ambiguous). Additive
+    // / expand-only: no existing row is rewritten and rollback stays safe.
+    check(
+      "projects_single_preview_shape",
+      sql`${table.preview} IS NULL OR (${table.demoUrl} IS NULL AND ${table.previewType} IS NULL)`,
     ),
   ],
 );

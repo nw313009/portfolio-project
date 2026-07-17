@@ -238,7 +238,7 @@ describe.skipIf(!hasDb)("createProjectWithAudit / setProjectStatusWithAudit", ()
     await deleteProject(ingestedId);
   });
 
-  it("creates a DRAFT that is hidden from the public timeline, then appears once published (as a metadata-only node)", async () => {
+  it("creates a DRAFT that is hidden from the public timeline, then appears once published (flat webapp -> synthesized webapp preview)", async () => {
     await createProjectWithAudit(row, "admin@example.com");
 
     const beforePublish = await getPublishedProjectEntries();
@@ -250,8 +250,13 @@ describe.skipIf(!hasDb)("createProjectWithAudit / setProjectStatusWithAudit", ()
     const node = afterPublish.find((entry) => entry.id === ingestedId);
     expect(node).toBeDefined();
     expect(node?.title).toBe("Ingested Draft");
-    // Metadata-only: no preview surface persisted for ingested rows this slice.
-    expect(node?.preview).toBeUndefined();
+    // Preview-rendering slice: a flat webapp ingested row (preview_type ===
+    // "webapp" + demo_url) is normalized by the read-path mapper into a
+    // SYNTHESIZED webapp union, not a metadata-only node.
+    expect(node?.preview).toEqual({
+      previewType: "webapp",
+      demoUrl: "https://demo.example.com",
+    });
   });
 
   it("wrote audit_log rows for the create and the publish (same actor)", async () => {
@@ -274,6 +279,55 @@ describe.skipIf(!hasDb)("createProjectWithAudit / setProjectStatusWithAudit", ()
     await expect(
       createProjectWithAudit(duplicate, "admin@example.com"),
     ).rejects.toBeInstanceOf(DuplicateProjectError);
+  });
+});
+
+/**
+ * Preview-rendering slice: the `projects_single_preview_shape` CHECK constraint
+ * makes the "exactly one preview shape per row" invariant a schema fact. A row
+ * that carries BOTH a `preview` jsonb AND a flat `demo_url`/`preview_type` must
+ * be rejected by Postgres (SQLSTATE 23514), not silently written — otherwise
+ * the read-path mapper's demo-link derivation would be ambiguous.
+ */
+describe.skipIf(!hasDb)("projects_single_preview_shape CHECK", () => {
+  it("rejects an insert that carries both a preview jsonb and a flat demo_url", async () => {
+    const id = `test-both-shapes-${randomUUID()}`;
+    const bothShapes: NewProjectRow = {
+      id,
+      slug: id,
+      title: "Both Shapes (invalid)",
+      startDate: "2020-01-01",
+      endDate: null,
+      stack: [],
+      languages: ["TypeScript"],
+      summary: "Invalid: two preview shapes in one row.",
+      githubUrl: "https://github.com/example/both-shapes",
+      preview: { previewType: "webapp", demoUrl: "https://example.com" },
+      // Flat column set alongside the jsonb — the CHECK must reject this.
+      demoUrl: "https://demo.example.com",
+      status: "published",
+    };
+    // The insert never lands, so there is nothing to clean up.
+    await expect(insertProject(bothShapes)).rejects.toThrow();
+  });
+
+  it("rejects an insert that carries both a preview jsonb and a flat preview_type", async () => {
+    const id = `test-both-shapes-type-${randomUUID()}`;
+    const bothShapes: NewProjectRow = {
+      id,
+      slug: id,
+      title: "Both Shapes by type (invalid)",
+      startDate: "2020-01-01",
+      endDate: null,
+      stack: [],
+      languages: ["TypeScript"],
+      summary: "Invalid: preview jsonb plus a flat preview_type.",
+      githubUrl: "https://github.com/example/both-shapes-type",
+      preview: { previewType: "webapp", demoUrl: "https://example.com" },
+      previewType: "webapp",
+      status: "published",
+    };
+    await expect(insertProject(bothShapes)).rejects.toThrow();
   });
 });
 

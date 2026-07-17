@@ -90,8 +90,12 @@ describe("projectRowToEntry", () => {
   });
 });
 
-/** A GitHub-ingested row: no `preview` jsonb, but `previewType`/`demoUrl` set. */
-function metadataOnlyRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
+/**
+ * A GitHub-ingested row: no `preview` jsonb. Defaults to a shape that stays
+ * metadata-only (no `previewType`, no `demoUrl`); each test overrides the flat
+ * fields to exercise the mapper's synthesis branch explicitly.
+ */
+function ingestedRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
   const now = new Date();
   return {
     id: "octocat-hello-world",
@@ -116,8 +120,8 @@ function metadataOnlyRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
     githubPushedAt: now,
     homepageUrl: null,
     metadataFetchedAt: now,
-    demoUrl: "https://demo.example.com",
-    previewType: "webapp",
+    demoUrl: null,
+    previewType: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -125,8 +129,8 @@ function metadataOnlyRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
 }
 
 describe("projectRowToTimelineNode", () => {
-  it("maps a GitHub-ingested row (no preview jsonb) to a metadata-only node", () => {
-    const node = projectRowToTimelineNode(metadataOnlyRow());
+  it("maps a flat ingested row with no preview shape to a metadata-only node", () => {
+    const node = projectRowToTimelineNode(ingestedRow());
     expect(node.preview).toBeUndefined();
     expect(node.title).toBe("Hello-World");
     expect(node.summary).toBe("My first repository on GitHub!");
@@ -140,43 +144,75 @@ describe("projectRowToTimelineNode", () => {
     expect(node.preview).toEqual(webappEntry.preview);
   });
 
-  it("throws on a corrupt metadata-only row (e.g. bad startDate) rather than serving it", () => {
+  it("SYNTHESIZES a webapp union from flat preview_type + demo_url", () => {
+    const node = projectRowToTimelineNode(
+      ingestedRow({ previewType: "webapp", demoUrl: "https://demo.example.com" }),
+    );
+    expect(node.preview).toEqual({
+      previewType: "webapp",
+      demoUrl: "https://demo.example.com",
+    });
+  });
+
+  it("stays metadata-only for a non-webapp previewType, even with a flat demoUrl (only webapp is synthesizable)", () => {
+    const node = projectRowToTimelineNode(
+      ingestedRow({ previewType: "library", demoUrl: "https://demo.example.com" }),
+    );
+    expect(node.preview).toBeUndefined();
+    // ...but the demo link is preserved as flat metadata.
+    expect(node.demoUrl).toBe("https://demo.example.com");
+  });
+
+  it("stays metadata-only for previewType 'webapp' WITHOUT a demoUrl (nothing to synthesize)", () => {
+    const node = projectRowToTimelineNode(
+      ingestedRow({ previewType: "webapp", demoUrl: null }),
+    );
+    expect(node.preview).toBeUndefined();
+    expect(node.demoUrl).toBeUndefined();
+  });
+
+  it("throws on a corrupt row (e.g. bad startDate) rather than serving it", () => {
     expect(() =>
-      projectRowToTimelineNode(metadataOnlyRow({ startDate: "not-a-date" })),
+      projectRowToTimelineNode(ingestedRow({ startDate: "not-a-date" })),
     ).toThrow();
   });
 
   it("carries a validated https demoUrl through for a metadata-only node", () => {
     const node = projectRowToTimelineNode(
-      metadataOnlyRow({ demoUrl: "https://demo.example.com" }),
+      ingestedRow({ previewType: "library", demoUrl: "https://demo.example.com" }),
     );
     expect(node.demoUrl).toBe("https://demo.example.com");
   });
 
-  it("carries demoUrl through even alongside a full preview (independent fields)", () => {
-    const row = toRow(webappEntry, "published");
-    const node = projectRowToTimelineNode({
-      ...row,
+  it("carries the flat demoUrl alongside a synthesized webapp preview (same URL, both populated in-memory)", () => {
+    const node = projectRowToTimelineNode(
+      ingestedRow({ previewType: "webapp", demoUrl: "https://demo.example.com" }),
+    );
+    expect(node.demoUrl).toBe("https://demo.example.com");
+    expect(node.preview).toEqual({
+      previewType: "webapp",
       demoUrl: "https://demo.example.com",
     });
-    expect(node.demoUrl).toBe("https://demo.example.com");
-    expect(node.preview).toEqual(webappEntry.preview);
   });
 
   it("leaves demoUrl undefined when the column is absent", () => {
-    const node = projectRowToTimelineNode(metadataOnlyRow({ demoUrl: null }));
+    const node = projectRowToTimelineNode(ingestedRow({ demoUrl: null }));
     expect(node.demoUrl).toBeUndefined();
   });
 
   it("throws instead of serving a non-https demoUrl (never loosen validation)", () => {
     expect(() =>
-      projectRowToTimelineNode(metadataOnlyRow({ demoUrl: "http://insecure.example.com" })),
+      projectRowToTimelineNode(
+        ingestedRow({ previewType: "webapp", demoUrl: "http://insecure.example.com" }),
+      ),
     ).toThrow();
   });
 
   it("throws instead of serving a malformed demoUrl", () => {
     expect(() =>
-      projectRowToTimelineNode(metadataOnlyRow({ demoUrl: "not-a-url" })),
+      projectRowToTimelineNode(
+        ingestedRow({ previewType: "webapp", demoUrl: "not-a-url" }),
+      ),
     ).toThrow();
   });
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD CONSTRAINT "projects_single_preview_shape" CHECK ("projects"."preview" IS NULL OR ("projects"."demo_url" IS NULL AND "projects"."preview_type" IS NULL));

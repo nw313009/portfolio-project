@@ -28,6 +28,17 @@ export function ProjectCard({ project, side = "left" }: ProjectCardProps) {
   const offsetX = side === "left" ? -24 : 24;
   const cardRef = useRef<HTMLElement>(null);
 
+  // ONE demo link, sourced from whichever shape holds the URL. A `webapp`'s
+  // demo lives in its (possibly synthesized) union; every other node's demo is
+  // the flat, validated-https `demoUrl` column. The DB CHECK guarantees only one
+  // shape is ever populated, so this derivation is unambiguous — a single
+  // presence-gated anchor, not two independent ones. The demo URL is project
+  // metadata (like `githubUrl`), not part of the type-gated preview surface.
+  const demoHref =
+    project.preview?.previewType === "webapp"
+      ? project.preview.demoUrl
+      : project.demoUrl;
+
   // Record a `view` the first time this node enters the viewport, then stop
   // observing (one view per project per page load). Fire-and-forget; a failure
   // never affects rendering. Runs only in the browser.
@@ -111,24 +122,11 @@ export function ProjectCard({ project, side = "left" }: ProjectCardProps) {
           >
             GitHub ↗
           </a>
-          {project.preview?.previewType === "webapp" ? (
+          {/* Exactly one demo anchor, from `demoHref` (derived above) — never
+              two. Present for any node with a demo URL, webapp or not. */}
+          {demoHref ? (
             <a
-              href={project.preview.demoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => track(project.id, "demo-open")}
-              className="text-sm font-medium underline-offset-4 hover:underline"
-            >
-              Demo ↗
-            </a>
-          ) : null}
-          {/* Independent of `preview`/`previewType` — a flat outbound link
-              rendered purely on presence of the (validated-https) `demoUrl`
-              column, so a metadata-only (GitHub-ingested) node gets a demo
-              link even though it has no preview surface yet. */}
-          {project.demoUrl ? (
-            <a
-              href={project.demoUrl}
+              href={demoHref}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => track(project.id, "demo-open")}
