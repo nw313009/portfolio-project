@@ -8,23 +8,24 @@ The public timeline (`src/app/page.tsx`) reads the `projects` table at build tim
 
 **Incident this codifies:** on 2026-07-13, `main` had never been migrated (empty `public` schema) when the first production deploy ran, and the build hard-failed prerendering `/` with a Postgres "relation does not exist" error. `main` was migrated and seeded manually to unblock the deploy; the build-resilience fix below (so a future gap degrades instead of crashing) was added at the same time, but **migrating/seeding `main` is still a manual step you must remember**.
 
+The `main` connection strings live in `.env.local` under **dedicated names** — `DATABASE_URL_MAIN` (pooled) and `DATABASE_URL_MAIN_UNPOOLED` (direct, for migrations) — so you **never hand-paste a connection string** (that's how the credential leaked once, and how `migrate` silently hit `dev` twice on 2026-07-17). Get them once from the Neon `main` branch → Connect (or Vercel → Production env) — they are DIFFERENT endpoints from the `dev` strings; don't reuse those.
+
 Whenever you change `src/db/schema.ts` (a new migration) or need `main`'s `projects` table to reflect new/edited content, **before deploying**:
 
-1. In the Neon console, open the `main` branch → **Connect** → copy both the **pooled** and **unpooled** connection strings. These are different endpoints from the `dev` branch strings in `.env.local` — do not reuse those.
-2. Apply the schema to `main` (unpooled string, since `drizzle-kit` prefers `DATABASE_URL_UNPOOLED` — see `drizzle.config.ts`):
+1. **Sanity-check the target** (read-only): for a preview-shape migration, `node scripts/verify-preview-shape.mjs main`; for any migration this doubles as a connectivity + host check. **Confirm the printed `host:` is the prod endpoint** (`ep-dry-mode-…`), NOT `ep-snowy-poetry-…` (dev). If it's dev or errors, STOP — your `.env.local` names are wrong.
+2. **Apply the schema to `main`:**
    ```powershell
-   $env:DATABASE_URL_UNPOOLED="<main-unpooled-connection-string>"
-   $env:DATABASE_URL="<main-unpooled-connection-string>"
-   pnpm exec drizzle-kit migrate
+   pnpm db:migrate:main
    ```
-3. **Verify it actually landed on `main`** — don't trust the CLI's success message (see the Slice 1 `dotenv`-reload gotcha in `PROGRESS.md`: a silently-wrong target still prints "success"). Check independently, e.g. via the Neon console → `main` → Tables, or by querying `information_schema.tables` directly against the same connection string.
-4. Seed/update `main`'s content (pooled string; `db:seed` only reads `DATABASE_URL`):
+   This reads `DATABASE_URL_MAIN_UNPOOLED` by name, echoes the target host (confirm it's prod again), and sets both `DATABASE_URL`/`DATABASE_URL_UNPOOLED` internally so `drizzle.config.ts`'s dotenv reload can't redirect to dev. It runs in a child process — **your shell env is never mutated**, so there's no cleanup step and no way to accidentally leave a shell pointed at `main`.
+3. **Verify it actually landed on `main`** — don't trust the CLI's "success" message (see the Slice 1 `dotenv`-reload gotcha in `PROGRESS.md`, and the 2026-07-17 wrong-branch miss: a silently-wrong target still prints "success"). Check independently — Neon console → `main` → Tables, or query `information_schema`/`pg_constraint` against `main`.
+4. **Seed/update `main`'s content** (only if content changed — a schema-only deploy skips this):
    ```powershell
-   $env:DATABASE_URL="<main-pooled-connection-string>"
-   pnpm db:seed
+   pnpm db:seed:main
    ```
-5. Verify the row count/content on `main` (Neon console, or a quick `select id, title, status from projects` against the pooled string).
-6. **Clean up:** unset the overrides (`Remove-Item Env:\DATABASE_URL`, `Remove-Item Env:\DATABASE_URL_UNPOOLED`) or open a fresh terminal before resuming normal dev work, so you don't accidentally run a dev command against `main`. Confirm `.env.local` still points at `dev` (it's never edited by these steps — they're process-level env overrides only).
+   Reads `DATABASE_URL_MAIN` by name, echoes the host, and reuses the idempotent `db:seed` in a child process (shell env untouched).
+5. Verify the row count/content on `main` (Neon console, or `select id, title, status from projects`).
+6. `.env.local` always stays pointed at `dev` — the `:main` wrappers only set env inside their child process, never your shell. Nothing to clean up.
 7. Redeploy (Vercel → Deployments → redeploy latest, or push a commit).
 
 This is a **deliberate manual runbook step for now, not an automated pipeline step.** A solo/low-traffic project doesn't need `main` migrations on the automatic deploy path yet — that would put a bad migration on the same path as a routine deploy. Automating this (a gated migration job) is deferred to **Phase 4 (production hardening)**, where CI/CD pipeline work lives and can add proper safeguards (dry-run, rollback, approval gate) around it.

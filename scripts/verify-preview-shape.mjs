@@ -6,7 +6,7 @@
 //
 //   node scripts/verify-preview-shape.mjs         # DATABASE_URL (dev)
 //   node scripts/verify-preview-shape.mjs test    # TEST_DATABASE_URL
-//   DATABASE_URL=<main-url> node scripts/verify-preview-shape.mjs   # deploy-time main check (docs/DEPLOY.md)
+//   node scripts/verify-preview-shape.mjs main    # DATABASE_URL_MAIN (deploy-time prod check, docs/DEPLOY.md)
 //
 // Read-only: it never writes, so it's safe to point at any branch, including main.
 import { config as loadEnv } from "dotenv";
@@ -14,7 +14,13 @@ import { neon } from "@neondatabase/serverless";
 
 loadEnv({ path: ".env.local", quiet: true });
 
-const target = process.argv[2] === "test" ? "TEST_DATABASE_URL" : "DATABASE_URL";
+const arg = process.argv[2];
+const target =
+  arg === "test"
+    ? "TEST_DATABASE_URL"
+    : arg === "main"
+      ? "DATABASE_URL_MAIN"
+      : "DATABASE_URL";
 const url = process.env[target];
 if (!url) {
   console.error(`${target} is not set in .env.local.`);

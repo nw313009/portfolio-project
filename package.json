@@ -17,7 +17,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:test": "node scripts/db-migrate-test.mjs",
+    "db:migrate:main": "node scripts/db-migrate-main.mjs",
     "db:seed:test": "node scripts/seed-test.mjs",
+    "db:seed:main": "node scripts/seed-main.mjs",
     "predb:seed": "velite",
     "db:seed": "tsx scripts/seed-projects.ts"
   },
