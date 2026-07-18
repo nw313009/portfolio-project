@@ -25,12 +25,11 @@ test("unauthenticated write to /api/admin/ping is denied", async ({
   expect(res.status()).not.toBe(200);
 });
 
-test("public timeline stays unauthenticated and untouched by middleware", async ({
+test("the public landing stays unauthenticated and untouched by middleware", async ({
   page,
 }) => {
+  // The public root must not be gated: no redirect to sign-in, page renders.
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Projects Timeline" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });

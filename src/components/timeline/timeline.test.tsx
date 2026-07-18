@@ -140,3 +140,44 @@ describe("Timeline pagination", () => {
     expect(sentinelObservations()).toHaveLength(0);
   });
 });
+
+describe("Timeline deep-linking", () => {
+  const manyProjects: ProjectEntry[] = Array.from({ length: 8 }, (_, index) =>
+    makeProject(`p${index}`, `Project ${index}`, `2020-${String(index + 1).padStart(2, "0")}-01`),
+  );
+
+  let scrollIntoView: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView as unknown as typeof Element.prototype.scrollIntoView;
+  });
+
+  afterEach(() => {
+    window.location.hash = "";
+  });
+
+  it("gives every node a slug id so it can be deep-linked", () => {
+    const { container } = render(<Timeline projects={projects} />);
+    for (const project of projects) {
+      expect(container.querySelector(`ol > li#${project.slug}`)).not.toBeNull();
+    }
+  });
+
+  it("force-mounts a target beyond the first page and scrolls to it on a #slug hash", () => {
+    window.location.hash = "#p7";
+    const { container } = render(<Timeline projects={manyProjects} />);
+
+    // p7 is the 8th project — beyond the 6-card first page — so the deep link
+    // must expand the pagination window to mount it, then scroll to it.
+    expect(container.querySelectorAll("ol > li")).toHaveLength(8);
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("does nothing for an unknown #slug", () => {
+    window.location.hash = "#does-not-exist";
+    const { container } = render(<Timeline projects={manyProjects} />);
+    expect(container.querySelectorAll("ol > li")).toHaveLength(6);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});

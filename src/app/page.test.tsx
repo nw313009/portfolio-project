@@ -26,7 +26,7 @@ const project: ProjectEntry = {
   slug: "demo",
   startDate: "2024-01-01",
   endDate: null,
-  stack: [],
+  stack: ["Next.js"],
   languages: [],
   summary: "A demo project.",
   githubUrl: "https://github.com/example/demo",
@@ -34,35 +34,43 @@ const project: ProjectEntry = {
   body: "",
 };
 
-describe("Home page", () => {
+describe("Landing page", () => {
   afterEach(() => {
     getPublishedProjectEntries.mockReset();
   });
 
-  it("renders the timeline once published projects load successfully", async () => {
-    getPublishedProjectEntries.mockResolvedValue([project]);
+  it("renders a hero heading and CTAs into projects and skills", async () => {
+    getPublishedProjectEntries.mockResolvedValue([]);
     renderHome(await Home());
-    expect(
-      screen.getByRole("heading", { level: 2, name: "Demo Project" }),
-    ).toBeInTheDocument();
+
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /view projects/i })).toHaveAttribute(
+      "href",
+      "/projects",
+    );
+    expect(screen.getByRole("link", { name: /explore skills/i })).toHaveAttribute(
+      "href",
+      "/skills",
+    );
   });
 
-  it("renders an empty state instead of crashing when the DB read fails (e.g. unmigrated/unreachable DB)", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    getPublishedProjectEntries.mockRejectedValue(new Error("relation \"projects\" does not exist"));
+  it("features recent published projects, deep-linked into the timeline", async () => {
+    getPublishedProjectEntries.mockResolvedValue([project]);
+    renderHome(await Home());
 
-    await expect(
-      (async () => renderHome(await Home()))(),
-    ).resolves.not.toThrow();
-    expect(screen.getByText(/check back soon/i)).toBeInTheDocument();
+    const featuredLink = screen.getByRole("link", { name: /demo project/i });
+    expect(featuredLink).toHaveAttribute("href", "/projects#demo");
+  });
+
+  it("renders the hero without a featured strip when the DB read fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    getPublishedProjectEntries.mockRejectedValue(new Error("db down"));
+
+    await expect((async () => renderHome(await Home()))()).resolves.not.toThrow();
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    expect(screen.queryByText(/featured work/i)).not.toBeInTheDocument();
     expect(consoleError).toHaveBeenCalled();
 
     consoleError.mockRestore();
-  });
-
-  it("renders the same empty state when there are simply zero published projects (not an error)", async () => {
-    getPublishedProjectEntries.mockResolvedValue([]);
-    renderHome(await Home());
-    expect(screen.getByText(/check back soon/i)).toBeInTheDocument();
   });
 });

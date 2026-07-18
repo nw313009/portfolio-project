@@ -2,6 +2,8 @@
 
 Each phase has a Goal, In-Scope, **Out-of-Scope** (hard guard against drift), Definition of Done, a Test Gate the agent must pass before stopping, and a Kickoff prompt. Do one phase, pass its gate, update `docs/PROGRESS.md`, then stop for review.
 
+**Convention shift at Phase 3:** Phases 1–2 are fully specified inline (~15 lines each). From Phase 3 on, a section here is an **INDEX** — goal, scope guards, and a pointer — while the full spec lives in a dedicated `docs/phases/PHASE-N.md`. Read the pointed-to file before any work on that phase; the inline section alone is not the spec.
+
 **Shared Test Gate commands** (run all, all must pass):
 `pnpm typecheck` · `pnpm lint` · `pnpm build` · `pnpm test` (where tests exist) · then Playwright MCP: start the dev server and verify that phase's acceptance criteria in a real browser.
 
@@ -25,23 +27,28 @@ Each phase has a Goal, In-Scope, **Out-of-Scope** (hard guard against drift), De
 
 ---
 
-## Phase 2 — Dynamic content + metrics
+## Phase 2 — Dynamic content + metrics — ✅ COMPLETE (DEPLOYED)
 **Goal:** Add projects without redeploying, and track visitor interactions.
 **Suggested model:** Sonnet 5 default; Opus 4.8 for the authN/authZ middleware and the GitHub-ingestion error handling.
 
-**In-scope:** Neon Postgres + Drizzle (tables: `projects`, append-only `events`, `audit_log`). Migrate MDX → DB; render timeline from DB with ISR. Auth.js (NextAuth v5) admin login (GitHub OAuth); authZ via `isAdmin` allowlist in middleware on all `/admin` and write routes. Admin page + `POST /api/projects` that ingests a GitHub URL (validate host, GitHub REST API for metadata/README) and, best-effort, captures a demo screenshot via Playwright. `POST /api/events` (rate-limited, no auth) + a `useTrack()` hook firing view/hover/demo-open/outbound-click via `sendBeacon`. Protected `/admin` dashboard aggregating events per project.
+**In-scope:** Neon Postgres + Drizzle (tables: `projects`, append-only `events`, `audit_log`). Migrate MDX → DB; render timeline from DB with ISR. Auth.js (NextAuth v5) admin login (GitHub OAuth); authZ via `isAdmin` allowlist (middleware = optimistic UX gate; the authoritative check is at the resource). Admin page + a GitHub-URL ingestion action (validate host, GitHub REST API for metadata) creating a draft. `POST /api/events` (rate-limited, no auth) + a `track()` hook firing view/hover/demo-open via `sendBeacon`. Protected `/admin` dashboard aggregating events per project.
 
 **Out-of-scope:** Python/FastAPI, AI features, AWS, live sandboxed builds, anything touching auth on the public hot path.
 
 **Locked infra decisions:**
-- **DB/testing:** Neon branching — a disposable/reset `test` branch for migrations + unit tests, a seeded `dev` branch for E2E, `main` = prod. Never test against prod. `DATABASE_URL` per env; migrations forward-only, committed.
-- **Media storage:** Vercel Blob (not AWS). Persist the blob URL on the project; wrap the upload in a single `storagePut()` helper so Phase 3 can swap to S3 without touching callers.
-- **Rate limiting:** `@upstash/ratelimit` on Upstash Redis, sliding window keyed on client IP; return 429 over the limit; never let a 429 affect the visitor UI; do NOT use Postgres for rate-limiting.
-- All three (Neon, Vercel Blob, Upstash) are serverless, scale-to-zero, free-tier, no-AWS.
+- **DB/testing:** Neon branching — a disposable/reset `test` branch for migrations + unit tests, a seeded `dev` branch for E2E, `main` = prod. Never test against prod. `DATABASE_URL` per env (prod named `DATABASE_URL_MAIN[_UNPOOLED]`, consumed by the `:main` script wrappers — never hand-pasted); migrations forward-only, committed.
+- ~~**Media storage:** Vercel Blob~~ **KILLED (2026-07-17):** Blob removed from Phase 2 — no consumer (MDX preview assets are committed to `/public`; screenshot-on-ingest was killed). `media_url` column is vestigial (drop is a deliberate later step). Blob re-enters only if admin rich-preview *upload* authoring becomes a slice (Phase 3+).
+- **Rate limiting:** `@upstash/ratelimit` on Upstash Redis, sliding window keyed on client IP; return 429 over the limit; never let a 429 affect the visitor UI; do NOT use Postgres for rate-limiting. (Events beacon fails OPEN; the contact form fails CLOSED — the abuse target there is the inbox.)
+- Neon + Upstash are serverless, scale-to-zero, free-tier, no-AWS.
 
 **Confirmed patterns (Context7-verified — use these, don't re-derive):**
 - Drizzle: `drizzle-orm/neon-http` + `@neondatabase/serverless` for fast edge/ISR reads; `drizzle-orm/neon-serverless` (WS `Pool`) when a write needs a transaction. Migrations via `drizzle-kit generate` / `migrate`.
 - Auth.js v5: split `auth.config.ts` (edge-safe, providers only) + `auth.ts`; JWT sessions (no DB adapter — single-admin allowlist); `[...nextauth]` route handler; `middleware.ts` wrapping `auth()`.
+
+**Locked patterns (as-built — do NOT re-derive or contradict):**
+- **authZ at the RESOURCE, not the middleware.** Middleware is an optimistic UX gate only (CVE-2025-29927 makes it bypassable); every privileged server op re-runs `requireAdmin()` server-side against the LIVE allowlist. Middleware is never the security boundary.
+- **`events.type = 'hover'` MEANS "preview button clicked"**, not hover-intent (reused the Slice 1 enum value under a no-migration constraint; dashboard relabels it "Preview opened"). Rename to `preview_open` only on the next `events` enum migration that happens for another reason.
+- **MDX is the PERMANENT rich-preview authoring path.** The read-path mapper normalizes two storage shapes into one union: rich `preview` jsonb (MDX) OR flat `preview_type`+`demo_url` (ingested → synthesizes only `webapp`). A `projects_single_preview_shape` CHECK enforces exactly one shape per row. Preview surfaces are NOT authorable via admin ingestion; screenshot/thumbnail-on-ingest is killed.
 
 **Definition of Done:** Public timeline reads from DB and stays cached/fast; admin login works and gates writes; adding a GitHub URL creates a project (draft on capture failure, never a 500); events land in the DB; dashboard shows per-project view/hover/CTR; audit_log records admin writes; Test Gate green.
 
@@ -49,17 +56,18 @@ Each phase has a Goal, In-Scope, **Out-of-Scope** (hard guard against drift), De
 
 ---
 
-## Phase 3 — Python/FastAPI backend + AI (on AWS)
-**Goal:** A real backend service that adds AI over the interaction data.
-**Suggested model:** Opus 4.8 for the service architecture, Next.js↔FastAPI contract, and IAM/deploy design; Sonnet 5 for routine implementation.
+## Phase 3 — AI Guide (RAG + agent) on AWS
+**⚠️ FULL SPEC: `docs/phases/PHASE-3.md`. Read it before any Phase 3 work — this section is the index only.**
+**Goal:** An opt-in, grounded AI guide over Writam's own corpus (projects, skills, about-me) that cites its sources and suggests what to see next.
+**Suggested model:** Opus 4.8 for every slice (see PHASE-3.md slice table).
 
-**In-scope:** FastAPI service with a provider abstraction over Anthropic/OpenAI. Insights job over `events` writing to an `insights` table Next.js reads. "Chat with my portfolio" via RAG on project data. Deploy the service to AWS (ECS/Fargate), media to S3, DB to RDS (or keep Neon and connect), secrets in a secret store, GitHub Actions CI/CD. Least-privilege IAM.
+**In-scope (summary):** FastAPI + LangGraph on a Lambda container (arm64) behind a Function URL with **Lambda Web Adapter** response streaming; Terraform (manual apply); pgvector on Neon; **Mistral Small (pinned model string)** + Mistral embeddings; Langfuse tracing; Upstash rate limiting + global daily spend ceiling (fails closed); chat interactions into the existing `events` table; eval harness + LLM-as-judge.
 
-**Out-of-scope:** Kubernetes; multi-region; anything that puts auth or the AI call on the public read hot path; agent autonomy over money/permissions without a human checkpoint.
+**Out-of-scope (hard guards):** Kubernetes; ECS/Fargate; S3/Blob; RDS; a dedicated vector DB; self-hosted weights; an `insights` table or ANY AI-over-visitor-data job; LangGraph checkpointers / server-side conversation state; a live re-embedding pipeline; provisioned concurrency; reading `events` from the agent; Mangum (**it buffers — will not stream**).
 
-**Definition of Done:** FastAPI deployed and reachable from Next.js over a typed contract; insights render; chat answers from real project data; IAM is least-privilege; traces/logs/metrics visible; Test Gate green (incl. contract tests between Next.js and FastAPI).
+**Superseded (do NOT build — earlier drafts of this file said otherwise):** Anthropic/OpenAI provider abstraction → **Mistral**. ECS/Fargate → **Lambda**. S3 media → **none**. RDS → **Neon**. GitHub Actions CI/CD → **Terraform, manual**. Insights job/table → **killed** (the AI is grounded on Writam's static corpus, not visitor data; `events` stays write-only).
 
-**Test Gate:** service healthcheck passes in AWS; Next.js → FastAPI contract test green; insights job is idempotent; chat returns grounded answers on a golden question set; unauthorized callers rejected.
+**Definition of Done + Test Gate:** per-slice, in `PHASE-3.md` §10.
 
 ---
 
@@ -75,6 +83,6 @@ Each phase has a Goal, In-Scope, **Out-of-Scope** (hard guard against drift), De
 ## Phase 5 — Scale / enterprise polish
 **Goal:** Only if traffic/portfolio goals demand it.
 **Suggested model:** Opus 4.8 for scaling/cost/infra decisions; Sonnet 5 for Terraform and routine changes.
-**In-scope:** caching/CDN tuning, event pipeline scaling (queue/batch), read replicas if needed, Terraform for repeatable infra, cost review.
+**In-scope:** caching/CDN tuning, event pipeline scaling (queue/batch), read replicas if needed, cost review, and *extending* the Terraform baseline. (Note: Terraform itself is **pulled forward into Phase 3** — it's the IaC tool from the AI service's first deploy, not a Phase 5 introduction.)
 **Out-of-scope:** anything not justified by a measured need.
 **Definition of Done + Gate:** infra reproducible from code; documented capacity limits; cost within budget; interview-ready write-up of the scaling decisions.

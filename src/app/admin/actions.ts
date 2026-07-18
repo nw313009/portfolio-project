@@ -116,9 +116,11 @@ export async function ingestProject(
 
 /**
  * Publish or unpublish a project (flips `status`), audit-logged in a Pool
- * transaction. Busts the ISR cache on `/` so a newly published project shows
- * on the public timeline without a redeploy (on-demand revalidation was
- * deferred to this slice in Slice 2).
+ * transaction. Busts the ISR cache on `/projects` (the public timeline) and
+ * `/` (the landing's featured strip reads the same published set) so a newly
+ * published project shows without a redeploy (on-demand revalidation was
+ * deferred to this slice in Slice 2). `/projects` was added when the timeline
+ * moved off `/` in the frontend transformation.
  */
 export async function setPublished(
   _prev: ActionResult | null,
@@ -144,6 +146,7 @@ export async function setPublished(
   }
 
   revalidatePath("/");
+  revalidatePath("/projects");
   revalidatePath("/admin");
   return { ok: true, message: publish ? "Published." : "Unpublished." };
 }

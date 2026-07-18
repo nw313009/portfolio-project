@@ -1,0 +1,14 @@
+---
+slug: api-design
+name: API & Untrusted Input
+category: backend
+order: 3
+projectSlugs:
+  - timeline-portfolio
+---
+
+Public write paths treated as hostile input: bot filtering, per-IP rate limiting
+on Upstash Redis, strict schema validation that rejects unknown fields,
+honeypots, and fire-and-forget beacons that never block the UI.
+
+{/* @placeholder — unreviewed corpus. Review this copy, then delete this line before the Phase 3 indexer embeds it (pnpm corpus:check). */}

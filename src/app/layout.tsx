@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
+import { SiteNav } from "@/components/site-nav";
+import { CursorGlow } from "@/components/effects/cursor-glow";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,8 +16,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Projects Timeline",
-  description: "A scroll-driven, center-line portfolio timeline.",
+  title: {
+    default: "Writam — Portfolio",
+    template: "%s — Writam",
+  },
+  description:
+    "A design-forward portfolio: a scroll-driven, center-line project timeline and the skills behind it.",
 };
 
 export default function RootLayout({
@@ -29,6 +35,8 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <CursorGlow />
+          <SiteNav />
           {children}
         </ThemeProvider>
       </body>

@@ -41,6 +41,7 @@ export function Timeline({ projects }: TimelineProps) {
   );
   const hasMore = visibleCount < projects.length;
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const [pendingScrollSlug, setPendingScrollSlug] = useState<string | null>(null);
 
   useEffect(() => {
     if (!hasMore) return;
@@ -59,6 +60,41 @@ export function Timeline({ projects }: TimelineProps) {
     return () => observer.disconnect();
   }, [hasMore, projects.length]);
 
+  // Deep-link support: `/projects#<slug>` scrolls to that project's node. This
+  // is also the Phase 3 citation-scroll contract (the AI guide navigates here).
+  // If the target sits beyond the current pagination window it's force-mounted
+  // first (grow `visibleCount`), and the actual scroll is deferred to the effect
+  // below so it runs only once the node is in the DOM.
+  useEffect(() => {
+    function handleHash() {
+      const slug = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+      if (!slug) return;
+      const targetIndex = projects.findIndex((project) => project.slug === slug);
+      if (targetIndex === -1) return;
+      setVisibleCount((current) =>
+        Math.max(current, Math.min(targetIndex + 1, projects.length)),
+      );
+      setPendingScrollSlug(slug);
+    }
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, [projects]);
+
+  useEffect(() => {
+    if (!pendingScrollSlug) return;
+    const node = document.getElementById(pendingScrollSlug);
+    if (!node) return; // target not mounted yet; a later `visibleCount` bump re-runs this
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    node.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
+    setPendingScrollSlug(null);
+  }, [pendingScrollSlug, visibleCount]);
+
   const visibleProjects = projects.slice(0, visibleCount);
 
   return (
@@ -74,8 +110,9 @@ export function Timeline({ projects }: TimelineProps) {
           return (
             <li
               key={project.id}
+              id={project.slug}
               data-side={side}
-              className="relative grid grid-cols-[2rem_1fr] items-start gap-x-4 sm:grid-cols-[1fr_2rem_1fr] sm:gap-x-6"
+              className="relative grid scroll-mt-20 grid-cols-[2rem_1fr] items-start gap-x-4 sm:grid-cols-[1fr_2rem_1fr] sm:gap-x-6"
             >
               <div className="col-start-2 row-start-1 sm:col-start-1">
                 {side === "left" ? (

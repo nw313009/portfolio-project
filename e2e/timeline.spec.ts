@@ -34,7 +34,7 @@ test.describe("Timeline acceptance", () => {
     // SUBSEQUENCE instead: all 4 canonical MDX titles must be present AND in
     // oldest-first order, tolerating ingested rows interleaved. This preserves
     // the test's intent (chronological ordering) without pinning the full set.
-    await page.goto("/");
+    await page.goto("/projects");
     const headings = page.getByRole("heading", { level: 2 });
 
     await expect(async () => {
@@ -49,7 +49,7 @@ test.describe("Timeline acceptance", () => {
   });
 
   test("scrolling advances the center line's draw progress", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/projects");
     const drawnLine = page.locator("svg path.stroke-primary");
 
     // Motion draws the line by writing `stroke-dasharray`/`pathLength`
@@ -61,8 +61,20 @@ test.describe("Timeline acceptance", () => {
     expect(afterScroll).not.toBe(beforeScroll);
   });
 
+  test("a /projects#slug deep link scrolls that node into view", async ({ page }) => {
+    // The newest project ("Timeline Portfolio", slug `timeline-portfolio`) is
+    // last, below the fold — a fresh load without the hash leaves it offscreen.
+    // Loading it directly via the hash is the Phase 3 citation-scroll contract.
+    await page.goto("/projects#timeline-portfolio");
+    const target = page.locator("li#timeline-portfolio");
+    await expect(target).toBeAttached();
+    await expect(
+      target.getByRole("heading", { level: 2, name: "Timeline Portfolio" }),
+    ).toBeInViewport({ timeout: 10_000 });
+  });
+
   test("scrolling reveals a below-the-fold card", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/projects");
     // The newest project ("Timeline Portfolio") is last, well below the fold.
     const lastCardHeading = page.getByRole("heading", {
       level: 2,
@@ -83,7 +95,7 @@ test.describe("Timeline acceptance", () => {
   });
 
   test("hovering the webapp card's preview mounts a sandboxed iframe", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/projects");
     const previewButton = page.getByRole("button", {
       name: /preview timeline portfolio/i,
     });
@@ -100,7 +112,7 @@ test.describe("Timeline acceptance", () => {
   });
 
   test("a non-webapp card renders its own media, never an iframe", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/projects");
     const pixelDungeonCard = page
       .getByRole("heading", { level: 2, name: "Pixel Dungeon" })
       .locator("xpath=ancestor::article[1]");
@@ -115,7 +127,7 @@ test.describe("Timeline acceptance", () => {
     // immediately, so this measures layout placement, not in-flight
     // whileInView slide-in offsets.
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto("/");
+    await page.goto("/projects");
 
     const cardArticles = page.locator("ol > li article");
     const count = await cardArticles.count();
@@ -143,7 +155,7 @@ test.describe("Timeline acceptance", () => {
     });
     page.on("pageerror", (error) => consoleErrors.push(error.message));
 
-    await page.goto("/");
+    await page.goto("/projects");
     await scrollPageBy(page, 1500);
 
     const previewButton = page.getByRole("button", {

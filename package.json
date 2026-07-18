@@ -9,6 +9,7 @@
     "start": "next start",
     "postinstall": "node scripts/ensure-playwright-browsers.mjs",
     "lint": "eslint",
+    "corpus:check": "node scripts/corpus-check.mjs",
     "pretypecheck": "velite",
     "typecheck": "tsc --noEmit",
     "pretest": "velite",

@@ -83,7 +83,11 @@ export function VisitorCard() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-4 pb-12" aria-label="Visitor card">
+    <section
+      id="contact"
+      className="mx-auto w-full max-w-4xl scroll-mt-20 px-4 pb-12"
+      aria-label="Visitor card"
+    >
       <Card className="relative">
         <Button
           type="button"

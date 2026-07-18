@@ -67,4 +67,11 @@ describe("VisitorCard", () => {
     expect(honeypot).toHaveAttribute("name", "website");
     expect(honeypot).toHaveAttribute("tabindex", "-1");
   });
+
+  it("exposes a #contact anchor with sticky-header scroll offset (nav deep-link target)", () => {
+    render(<VisitorCard />);
+    const section = screen.getByRole("region", { name: /visitor card/i });
+    expect(section).toHaveAttribute("id", "contact");
+    expect(section.className).toMatch(/scroll-mt-/);
+  });
 });

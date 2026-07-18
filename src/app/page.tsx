@@ -1,64 +1,42 @@
-import { SiteHeading } from "@/components/site-heading";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { Timeline } from "@/components/timeline/timeline";
-import { VisitorCard } from "@/components/visitor-card";
+import { Hero } from "@/components/landing/hero";
+import { FeaturedProjects } from "@/components/landing/featured-projects";
+import { about } from "@/lib/about";
 import { getPublishedProjectEntries } from "@/db/queries";
 import type { TimelineProject } from "@/lib/content";
 
 /**
- * ISR (Slice 2): this Server Component has no dynamic APIs (no cookies,
- * headers, or searchParams), so it's still statically prerendered and served
- * from cache — the public read path stays fast with no auth on it — but the
- * cached page is regenerated in the background at most once per hour so a
- * newly published project shows up without a redeploy.
+ * The landing page's featured strip reads the same published set as the
+ * timeline, so it uses the same ISR window — no dynamic APIs, so `/` stays
+ * statically prerendered and regenerated at most hourly.
  */
 export const revalidate = 3600;
 
+/** How many recent projects the featured strip shows. */
+const FEATURED_COUNT = 3;
+
 /**
- * Build resilience (Slice 2 hardening, prompted by a real incident: the
- * `main` branch was never migrated, and `next build` hard-failed prerendering
- * `/` when the query hit a missing `projects` table). A DB hiccup — an
- * unmigrated/unreachable database, a transient network blip, or a genuinely
- * empty table — must never crash the build or the page; it degrades to the
- * empty state below instead, and the next ISR regeneration retries once the
- * DB is reachable again.
+ * Same build-resilience posture as `/projects`: a DB hiccup must never crash the
+ * build or the page. On failure the featured strip simply renders nothing (the
+ * hero still stands on its own), and the next ISR pass retries.
  */
-async function loadPublishedProjects(): Promise<TimelineProject[]> {
+async function loadFeaturedProjects(): Promise<TimelineProject[]> {
   try {
-    return await getPublishedProjectEntries();
+    const published = await getPublishedProjectEntries();
+    // `getPublishedProjectEntries` returns oldest-first; feature the newest.
+    return published.slice(-FEATURED_COUNT).reverse();
   } catch (error) {
-    console.error("Failed to load published projects for the timeline:", error);
+    console.error("Failed to load featured projects for the landing page:", error);
     return [];
   }
 }
 
 export default async function Home() {
-  const projects = await loadPublishedProjects();
+  const featured = await loadFeaturedProjects();
 
   return (
-    <main className="flex min-h-screen flex-col gap-6 p-8">
-      <div className="mx-auto flex w-full max-w-4xl items-start justify-between gap-4">
-        <div className="flex-1">
-          <SiteHeading
-            title="Projects Timeline"
-            subtitle="A scroll-driven, center-line portfolio."
-          />
-        </div>
-        <ThemeToggle />
-      </div>
-      {projects.length > 0 ? (
-        <Timeline projects={projects} />
-      ) : (
-        <p className="mx-auto max-w-4xl px-4 py-12 text-center text-sm text-muted-foreground">
-          No projects to show yet — check back soon.
-        </p>
-      )}
-      {/*
-        Optional "who's visiting" card at the END of the timeline (Slice 6).
-        A client component that only POSTs on a deliberate submit, so `/` stays
-        statically prerendered + ISR — it never fetches during render.
-      */}
-      <VisitorCard />
+    <main className="flex flex-col">
+      <Hero name={about.name} role={about.role} tagline={about.tagline} />
+      <FeaturedProjects projects={featured} />
     </main>
   );
 }

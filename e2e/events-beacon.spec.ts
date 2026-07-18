@@ -24,11 +24,11 @@ test("firing the view beacon does not disturb the timeline", async ({ page }) =>
     { timeout: 15_000 },
   );
 
-  await page.goto("/");
+  await page.goto("/projects");
 
   // Timeline still renders as before.
   await expect(
-    page.getByRole("heading", { level: 1, name: "Projects Timeline" }),
+    page.getByRole("heading", { level: 1, name: "Projects" }),
   ).toBeVisible();
 
   // The view beacon was emitted and accepted (204 = recorded or silently
